@@ -1,1 +1,0 @@
-exception Noop(string);
