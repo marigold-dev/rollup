@@ -166,12 +166,14 @@ type prim =
   | T_bls12_381_g2
   | T_bls12_381_fr
   | T_ticket
+
 let prim_encoding =
   let open Data_encoding in
   def "michelson.v1.primitives"
   @@ string_enum
        (* Add the comment below every 10 lines *)
-       [ (* /!\ NEW INSTRUCTIONS MUST BE ADDED AT THE END OF THE STRING_ENUM, FOR BACKWARD COMPATIBILITY OF THE ENCODING. *)
+       [
+         (* /!\ NEW INSTRUCTIONS MUST BE ADDED AT THE END OF THE STRING_ENUM, FOR BACKWARD COMPATIBILITY OF THE ENCODING. *)
          ("parameter", K_parameter);
          ("storage", K_storage);
          ("code", K_code);
@@ -331,291 +333,150 @@ let prim_encoding =
          ("READ_TICKET", I_READ_TICKET);
          ("SPLIT_TICKET", I_SPLIT_TICKET);
          ("JOIN_TICKETS", I_JOIN_TICKETS);
-         ("GET_AND_UPDATE", I_GET_AND_UPDATE)
+         ("GET_AND_UPDATE", I_GET_AND_UPDATE);
          (* New instructions must be added here, for backward compatibility of the encoding. *)
          (* Keep the comment above at the end of the list *)
-        ]
+       ]
 
 let string_of_prim = function
-        | K_parameter ->
-            "parameter"
-        | K_storage ->
-            "storage"
-        | K_code ->
-            "code"
-        | D_False ->
-            "False"
-        | D_Elt ->
-            "Elt"
-        | D_Left ->
-            "Left"
-        | D_None ->
-            "None"
-        | D_Pair ->
-            "Pair"
-        | D_Right ->
-            "Right"
-        | D_Some ->
-            "Some"
-        | D_True ->
-            "True"
-        | D_Unit ->
-            "Unit"
-        | I_PACK ->
-            "PACK"
-        | I_UNPACK ->
-            "UNPACK"
-        | I_BLAKE2B ->
-            "BLAKE2B"
-        | I_SHA256 ->
-            "SHA256"
-        | I_SHA512 ->
-            "SHA512"
-        | I_ABS ->
-            "ABS"
-        | I_ADD ->
-            "ADD"
-        | I_AMOUNT ->
-            "AMOUNT"
-        | I_AND ->
-            "AND"
-        | I_BALANCE ->
-            "BALANCE"
-        | I_CAR ->
-            "CAR"
-        | I_CDR ->
-            "CDR"
-        | I_CHAIN_ID ->
-            "CHAIN_ID"
-        | I_CHECK_SIGNATURE ->
-            "CHECK_SIGNATURE"
-        | I_COMPARE ->
-            "COMPARE"
-        | I_CONCAT ->
-            "CONCAT"
-        | I_CONS ->
-            "CONS"
-        | I_CREATE_ACCOUNT ->
-            "CREATE_ACCOUNT"
-        | I_CREATE_CONTRACT ->
-            "CREATE_CONTRACT"
-        | I_IMPLICIT_ACCOUNT ->
-            "IMPLICIT_ACCOUNT"
-        | I_DIP ->
-            "DIP"
-        | I_DROP ->
-            "DROP"
-        | I_DUP ->
-            "DUP"
-        | I_EDIV ->
-            "EDIV"
-        | I_EMPTY_BIG_MAP ->
-            "EMPTY_BIG_MAP"
-        | I_EMPTY_MAP ->
-            "EMPTY_MAP"
-        | I_EMPTY_SET ->
-            "EMPTY_SET"
-        | I_EQ ->
-            "EQ"
-        | I_EXEC ->
-            "EXEC"
-        | I_APPLY ->
-            "APPLY"
-        | I_FAILWITH ->
-            "FAILWITH"
-        | I_GE ->
-            "GE"
-        | I_GET ->
-            "GET"
-        | I_GET_AND_UPDATE ->
-            "GET_AND_UPDATE"
-        | I_GT ->
-            "GT"
-        | I_HASH_KEY ->
-            "HASH_KEY"
-        | I_IF ->
-            "IF"
-        | I_IF_CONS ->
-            "IF_CONS"
-        | I_IF_LEFT ->
-            "IF_LEFT"
-        | I_IF_NONE ->
-            "IF_NONE"
-        | I_INT ->
-            "INT"
-        | I_LAMBDA ->
-            "LAMBDA"
-        | I_LE ->
-            "LE"
-        | I_LEFT ->
-            "LEFT"
-        | I_LEVEL ->
-            "LEVEL"
-        | I_LOOP ->
-            "LOOP"
-        | I_LSL ->
-            "LSL"
-        | I_LSR ->
-            "LSR"
-        | I_LT ->
-            "LT"
-        | I_MAP ->
-            "MAP"
-        | I_MEM ->
-            "MEM"
-        | I_MUL ->
-            "MUL"
-        | I_NEG ->
-            "NEG"
-        | I_NEQ ->
-            "NEQ"
-        | I_NIL ->
-            "NIL"
-        | I_NONE ->
-            "NONE"
-        | I_NOT ->
-            "NOT"
-        | I_NOW ->
-            "NOW"
-        | I_OR ->
-            "OR"
-        | I_PAIR ->
-            "PAIR"
-        | I_PUSH ->
-            "PUSH"
-        | I_RIGHT ->
-            "RIGHT"
-        | I_SIZE ->
-            "SIZE"
-        | I_SOME ->
-            "SOME"
-        | I_SOURCE ->
-            "SOURCE"
-        | I_SENDER ->
-            "SENDER"
-        | I_SELF ->
-            "SELF"
-        | I_SELF_ADDRESS ->
-            "SELF_ADDRESS"
-        | I_SLICE ->
-            "SLICE"
-        | I_STEPS_TO_QUOTA ->
-            "STEPS_TO_QUOTA"
-        | I_SUB ->
-            "SUB"
-        | I_SWAP ->
-            "SWAP"
-        | I_TRANSFER_TOKENS ->
-            "TRANSFER_TOKENS"
-        | I_SET_DELEGATE ->
-            "SET_DELEGATE"
-        | I_UNIT ->
-            "UNIT"
-        | I_UNPAIR ->
-            "UNPAIR"
-        | I_UPDATE ->
-            "UPDATE"
-        | I_XOR ->
-            "XOR"
-        | I_ITER ->
-            "ITER"
-        | I_LOOP_LEFT ->
-            "LOOP_LEFT"
-        | I_ADDRESS ->
-            "ADDRESS"
-        | I_CONTRACT ->
-            "CONTRACT"
-        | I_ISNAT ->
-            "ISNAT"
-        | I_CAST ->
-            "CAST"
-        | I_RENAME ->
-            "RENAME"
-        | I_SAPLING_EMPTY_STATE ->
-            "SAPLING_EMPTY_STATE"
-        | I_SAPLING_VERIFY_UPDATE ->
-            "SAPLING_VERIFY_UPDATE"
-        | I_DIG ->
-            "DIG"
-        | I_DUG ->
-            "DUG"
-        | I_NEVER ->
-            "NEVER"
-        | I_VOTING_POWER ->
-            "VOTING_POWER"
-        | I_TOTAL_VOTING_POWER ->
-            "TOTAL_VOTING_POWER"
-        | I_KECCAK ->
-            "KECCAK"
-        | I_SHA3 ->
-            "SHA3"
-        | I_PAIRING_CHECK ->
-            "PAIRING_CHECK"
-        | I_TICKET ->
-            "TICKET"
-        | I_READ_TICKET ->
-            "READ_TICKET"
-        | I_SPLIT_TICKET ->
-            "SPLIT_TICKET"
-        | I_JOIN_TICKETS ->
-            "JOIN_TICKETS"
-        | T_bool ->
-            "bool"
-        | T_contract ->
-            "contract"
-        | T_int ->
-            "int"
-        | T_key ->
-            "key"
-        | T_key_hash ->
-            "key_hash"
-        | T_lambda ->
-            "lambda"
-        | T_list ->
-            "list"
-        | T_map ->
-            "map"
-        | T_big_map ->
-            "big_map"
-        | T_nat ->
-            "nat"
-        | T_option ->
-            "option"
-        | T_or ->
-            "or"
-        | T_pair ->
-            "pair"
-        | T_set ->
-            "set"
-        | T_signature ->
-            "signature"
-        | T_string ->
-            "string"
-        | T_bytes ->
-            "bytes"
-        | T_mutez ->
-            "mutez"
-        | T_timestamp ->
-            "timestamp"
-        | T_unit ->
-            "unit"
-        | T_operation ->
-            "operation"
-        | T_address ->
-            "address"
-        | T_sapling_state ->
-            "sapling_state"
-        | T_sapling_transaction ->
-            "sapling_transaction"
-        | T_chain_id ->
-            "chain_id"
-        | T_never ->
-            "never"
-        | T_bls12_381_g1 ->
-            "bls12_381_g1"
-        | T_bls12_381_g2 ->
-            "bls12_381_g2"
-        | T_bls12_381_fr ->
-            "bls12_381_fr"
-        | T_ticket ->
-            "ticket"
+  | K_parameter -> "parameter"
+  | K_storage -> "storage"
+  | K_code -> "code"
+  | D_False -> "False"
+  | D_Elt -> "Elt"
+  | D_Left -> "Left"
+  | D_None -> "None"
+  | D_Pair -> "Pair"
+  | D_Right -> "Right"
+  | D_Some -> "Some"
+  | D_True -> "True"
+  | D_Unit -> "Unit"
+  | I_PACK -> "PACK"
+  | I_UNPACK -> "UNPACK"
+  | I_BLAKE2B -> "BLAKE2B"
+  | I_SHA256 -> "SHA256"
+  | I_SHA512 -> "SHA512"
+  | I_ABS -> "ABS"
+  | I_ADD -> "ADD"
+  | I_AMOUNT -> "AMOUNT"
+  | I_AND -> "AND"
+  | I_BALANCE -> "BALANCE"
+  | I_CAR -> "CAR"
+  | I_CDR -> "CDR"
+  | I_CHAIN_ID -> "CHAIN_ID"
+  | I_CHECK_SIGNATURE -> "CHECK_SIGNATURE"
+  | I_COMPARE -> "COMPARE"
+  | I_CONCAT -> "CONCAT"
+  | I_CONS -> "CONS"
+  | I_CREATE_ACCOUNT -> "CREATE_ACCOUNT"
+  | I_CREATE_CONTRACT -> "CREATE_CONTRACT"
+  | I_IMPLICIT_ACCOUNT -> "IMPLICIT_ACCOUNT"
+  | I_DIP -> "DIP"
+  | I_DROP -> "DROP"
+  | I_DUP -> "DUP"
+  | I_EDIV -> "EDIV"
+  | I_EMPTY_BIG_MAP -> "EMPTY_BIG_MAP"
+  | I_EMPTY_MAP -> "EMPTY_MAP"
+  | I_EMPTY_SET -> "EMPTY_SET"
+  | I_EQ -> "EQ"
+  | I_EXEC -> "EXEC"
+  | I_APPLY -> "APPLY"
+  | I_FAILWITH -> "FAILWITH"
+  | I_GE -> "GE"
+  | I_GET -> "GET"
+  | I_GET_AND_UPDATE -> "GET_AND_UPDATE"
+  | I_GT -> "GT"
+  | I_HASH_KEY -> "HASH_KEY"
+  | I_IF -> "IF"
+  | I_IF_CONS -> "IF_CONS"
+  | I_IF_LEFT -> "IF_LEFT"
+  | I_IF_NONE -> "IF_NONE"
+  | I_INT -> "INT"
+  | I_LAMBDA -> "LAMBDA"
+  | I_LE -> "LE"
+  | I_LEFT -> "LEFT"
+  | I_LEVEL -> "LEVEL"
+  | I_LOOP -> "LOOP"
+  | I_LSL -> "LSL"
+  | I_LSR -> "LSR"
+  | I_LT -> "LT"
+  | I_MAP -> "MAP"
+  | I_MEM -> "MEM"
+  | I_MUL -> "MUL"
+  | I_NEG -> "NEG"
+  | I_NEQ -> "NEQ"
+  | I_NIL -> "NIL"
+  | I_NONE -> "NONE"
+  | I_NOT -> "NOT"
+  | I_NOW -> "NOW"
+  | I_OR -> "OR"
+  | I_PAIR -> "PAIR"
+  | I_PUSH -> "PUSH"
+  | I_RIGHT -> "RIGHT"
+  | I_SIZE -> "SIZE"
+  | I_SOME -> "SOME"
+  | I_SOURCE -> "SOURCE"
+  | I_SENDER -> "SENDER"
+  | I_SELF -> "SELF"
+  | I_SELF_ADDRESS -> "SELF_ADDRESS"
+  | I_SLICE -> "SLICE"
+  | I_STEPS_TO_QUOTA -> "STEPS_TO_QUOTA"
+  | I_SUB -> "SUB"
+  | I_SWAP -> "SWAP"
+  | I_TRANSFER_TOKENS -> "TRANSFER_TOKENS"
+  | I_SET_DELEGATE -> "SET_DELEGATE"
+  | I_UNIT -> "UNIT"
+  | I_UNPAIR -> "UNPAIR"
+  | I_UPDATE -> "UPDATE"
+  | I_XOR -> "XOR"
+  | I_ITER -> "ITER"
+  | I_LOOP_LEFT -> "LOOP_LEFT"
+  | I_ADDRESS -> "ADDRESS"
+  | I_CONTRACT -> "CONTRACT"
+  | I_ISNAT -> "ISNAT"
+  | I_CAST -> "CAST"
+  | I_RENAME -> "RENAME"
+  | I_SAPLING_EMPTY_STATE -> "SAPLING_EMPTY_STATE"
+  | I_SAPLING_VERIFY_UPDATE -> "SAPLING_VERIFY_UPDATE"
+  | I_DIG -> "DIG"
+  | I_DUG -> "DUG"
+  | I_NEVER -> "NEVER"
+  | I_VOTING_POWER -> "VOTING_POWER"
+  | I_TOTAL_VOTING_POWER -> "TOTAL_VOTING_POWER"
+  | I_KECCAK -> "KECCAK"
+  | I_SHA3 -> "SHA3"
+  | I_PAIRING_CHECK -> "PAIRING_CHECK"
+  | I_TICKET -> "TICKET"
+  | I_READ_TICKET -> "READ_TICKET"
+  | I_SPLIT_TICKET -> "SPLIT_TICKET"
+  | I_JOIN_TICKETS -> "JOIN_TICKETS"
+  | T_bool -> "bool"
+  | T_contract -> "contract"
+  | T_int -> "int"
+  | T_key -> "key"
+  | T_key_hash -> "key_hash"
+  | T_lambda -> "lambda"
+  | T_list -> "list"
+  | T_map -> "map"
+  | T_big_map -> "big_map"
+  | T_nat -> "nat"
+  | T_option -> "option"
+  | T_or -> "or"
+  | T_pair -> "pair"
+  | T_set -> "set"
+  | T_signature -> "signature"
+  | T_string -> "string"
+  | T_bytes -> "bytes"
+  | T_mutez -> "mutez"
+  | T_timestamp -> "timestamp"
+  | T_unit -> "unit"
+  | T_operation -> "operation"
+  | T_address -> "address"
+  | T_sapling_state -> "sapling_state"
+  | T_sapling_transaction -> "sapling_transaction"
+  | T_chain_id -> "chain_id"
+  | T_never -> "never"
+  | T_bls12_381_g1 -> "bls12_381_g1"
+  | T_bls12_381_g2 -> "bls12_381_g2"
+  | T_bls12_381_fr -> "bls12_381_fr"
+  | T_ticket -> "ticket"

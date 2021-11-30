@@ -341,36 +341,37 @@ let received_operation =
     Ok();
   };
 
-let received_main_operation = (state, update_state, operation) => {
-  switch (operation.Tezos_interop.Consensus.parameters) {
-  // TODO: handle this properly
-  | Update_root_hash(_) => Ok()
-  | Deposit({ticket, amount, destination}) =>
-    let.ok destination =
-      switch (destination) {
-      | Implicit(destination) => Ok(Address.of_key_hash(destination))
-      | _ => Error(`Invalid_address_on_main_operation)
-      };
-    let amount = Amount.of_int(Z.to_int(amount));
-    let kind = Operation.Main_chain.Deposit({ticket, amount, destination});
-    let operation =
-      Operation.Main_chain.make(
-        ~tezos_hash=operation.Tezos_interop.Consensus.hash,
-        ~tezos_index=operation.index,
-        ~kind,
-      );
-    if (!List.mem(operation, state.Node.pending_main_ops)) {
-      let _ =
-        update_state(
-          Node.{
-            ...state,
-            pending_main_ops: [operation, ...state.Node.pending_main_ops],
-          },
-        );
-      ();
-    };
-    Ok();
-  };
+let received_main_operation = (_state, _update_state, _operation) => {
+  ()// switch (operation.Tezos_interop.Consensus.parameters) {
+    // // TODO: handle this properly
+    // // | Update_root_hash(_) => Ok()
+    // | Deposit({ticket, amount, destination}) =>
+    //   let.ok destination =
+    //     switch (destination) {
+    //     | Implicit(destination) => Ok(Address.of_key_hash(destination))
+    //     | _ => Error(`Invalid_address_on_main_operation)
+    //     };
+    //   let amount = Amount.of_int(Z.to_int(amount));
+    //   let kind = Operation.Main_chain.Deposit({ticket, amount, destination});
+    //   let operation =
+    //     Operation.Main_chain.make(
+    //       ~tezos_hash=operation.Tezos_interop.Consensus.hash,
+    //       ~tezos_index=operation.index,
+    //       ~kind,
+    //     );
+    //   if (!List.mem(operation, state.Node.pending_main_ops)) {
+    //     let _ =
+    //       update_state(
+    //         Node.{
+    //           ...state,
+    //           pending_main_ops: [operation, ...state.Node.pending_main_ops],
+    //         },
+    //       );
+    //     ();
+    //   };
+    //   Ok();
+    ;
+    // };
 };
 
 let find_block_by_hash = (state, hash) =>

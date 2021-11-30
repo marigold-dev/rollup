@@ -312,8 +312,7 @@ module Consensus = {
         state_hash |> Bytes.to_string |> BLAKE2B.of_raw_string;
       Some(Commit({level, state_hash}));
     | ("submit", Micheline.Bytes(_, submission)) =>
-      Printf.printf("Bytes:  %s\n", Bytes.to_string(submission));
-      Some(Submit(submission));
+      Some(Submit(submission))
     | ("join", _) => Some(Join)
     | _ => None
     };

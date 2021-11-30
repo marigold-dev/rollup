@@ -1,7 +1,7 @@
 (executable
  (name rollup)
  (public_name rollup)
- (libraries opium files node helpers cmdliner)
+ (libraries opium files helpers cmdliner)
  (modules rollup)
  (preprocess
   (pps ppx_deriving.show ppx_deriving_yojson)))
