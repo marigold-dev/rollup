@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "ocaml": "4.12.x",
+    "@opam/dune": "*"
+  },
+  "devDependencies": {
+    "@opam/ocamlformat": "*",
+    "@opam/ocamlformat-rpc": "*",
+    "@opam/ocaml-lsp-server": "*"
+  }
+}
