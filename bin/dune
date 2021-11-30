@@ -6,17 +6,9 @@
  (preprocess
   (pps ppx_deriving.show ppx_deriving_yojson)))
 
-(executable
- (name sidecli)
- (libraries node files helpers cmdliner)
- (modules Sidecli)
- (public_name sidecli)
- (preprocess
-  (pps ppx_deriving_yojson)))
-
 (library
  (name files)
  (modules Files)
- (libraries lwt lwt.unix node)
+ (libraries lwt lwt.unix tezos_interop)
  (preprocess
   (pps ppx_deriving_yojson)))

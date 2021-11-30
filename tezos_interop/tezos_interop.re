@@ -96,64 +96,6 @@ let michelson_of_yojson = json => {
 };
 type michelson =
   Tezos_micheline.Micheline.node(int, Pack.Michelson_v1_primitives.prim);
-// module Fetch_storage: {
-//   let run:
-//     (~rpc_node: Uri.t, ~contract_address: Address.t) =>
-//     Lwt.t(result(michelson, string));
-// } = {
-//   [@deriving to_yojson]
-//   type input = {
-//     rpc_node: string,
-//     contract_address: string,
-//   };
-//   let output_of_yojson = json => {
-//     module T = {
-//       [@deriving of_yojson({strict: false})]
-//       type t = {status: string}
-//       and finished = {storage: michelson}
-//       and error = {error: string};
-//     };
-//     let.ok {status} = T.of_yojson(json);
-//     switch (status) {
-//     | "success" =>
-//       let.ok {storage} = T.finished_of_yojson(json);
-//       Ok(storage);
-//     | "error" =>
-//       let.ok T.{error: errorMessage} = T.error_of_yojson(json);
-//       Error(errorMessage);
-//     | _ =>
-//       Error(
-//         "JSON output %s did not contain 'success' or 'error' for field `status`",
-//       )
-//     };
-//   };
-
-//   // TODO: stop hard coding this
-//   let command = "node";
-//   let file = {
-//     let.await (file, oc) = Lwt_io.open_temp_file(~suffix=".js", ());
-//     let.await () = Lwt_io.write(oc, [%blob "fetch_storage.bundle.js"]);
-//     await(file);
-//   };
-//   let file = Lwt_main.run(file);
-
-//   let run = (~rpc_node, ~contract_address) => {
-//     let input = {
-//       rpc_node: Uri.to_string(rpc_node),
-//       contract_address: Address.to_string(contract_address),
-//     };
-//     let.await output =
-//       Lwt_process.pmap(
-//         (command, [|command, file|]),
-//         Yojson.Safe.to_string(input_to_yojson(input)),
-//       );
-
-//     switch (Yojson.Safe.from_string(output) |> output_of_yojson) {
-//     | Ok(storage) => await(Ok(storage))
-//     | Error(error) => await(Error(error))
-//     };
-//   };
-// };
 
 module Listen_transactions = {
   [@deriving of_yojson]

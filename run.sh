@@ -1,5 +1,5 @@
-# ./sandbox.sh tear-down
-# ./sandbox.sh setup
+./sandbox.sh tear-down
+./sandbox.sh setup
 
 tezos_client() {
   docker exec -it my-sandbox tezos-client "$@"

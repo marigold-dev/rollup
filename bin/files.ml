@@ -5,15 +5,17 @@ exception Invalid_json of string
 let read_json of_yojson ~file =
   let open Lwt in
   let open Lwt.Syntax in
-  let* string = Lwt_io.with_file ~mode:Input file Lwt_io.read in
-  let json = Yojson.Safe.from_string string in
+  let* str = Lwt_io.with_file ~mode:Input file Lwt_io.read in
+  let json = Yojson.Safe.from_string str in
   match of_yojson json with
   | Ok data -> return data
   | Error error -> raise (Invalid_json error)
 
 let write_json to_yojson data ~file =
-  Lwt_io.with_file ~mode:Output file (fun oc ->
-      Lwt_io.write oc (Yojson.Safe.pretty_to_string (to_yojson data)))
+  let callback oc =
+    Lwt_io.write oc (Yojson.Safe.pretty_to_string (to_yojson data))
+  in
+  Lwt_io.with_file ~mode:Output file callback
 
 module Interop_context = struct
   module Secret = struct
@@ -26,7 +28,6 @@ module Interop_context = struct
 
     let to_yojson t = `String (to_string t)
   end
-  [@deriving yojson]
 
   type t = Tezos_interop.Context.t = {
     rpc_node : Uri.t;

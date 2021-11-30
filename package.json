@@ -47,9 +47,8 @@
   "devDependencies": {
     "prettier": "^2.3.2",
     "@opam/ocaml-lsp-server": "*",
-    "@opam/ocamlformat": "0.19.0",
+    "@opam/ocamlformat": "*",
     "@opam/utop": "^2.8.0",
-    "@opam/menhir": "20210419",
     "@opam/ocamlformat-rpc": "*"
   },
   "resolutions": {

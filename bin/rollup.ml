@@ -24,4 +24,4 @@ let node =
   in
   Term.(const node $ folder_node)
 
-let () = Term.exit @@ Term.eval (node, Term.info "deku-node")
+let () = Term.exit @@ Term.eval (node, Term.info "rollup-node")
