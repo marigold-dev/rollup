@@ -1,0 +1,5 @@
+(executable
+ (name dtop)
+ (modes byte)
+ (link_flags (-linkall))
+ (libraries compiler-libs.toplevel utop reason rtop))
