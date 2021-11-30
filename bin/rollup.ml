@@ -1,9 +1,7 @@
 open Cmdliner
-open Helpers
 
 let node folder =
   let open Lwt.Syntax in
-  let open Lwt.Infix in
   let* interop_context =
     Files.Interop_context.read ~file:(folder ^ "/tezos.json")
   in
