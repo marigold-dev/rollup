@@ -46,10 +46,10 @@ let _print_error = err => {
 
 let node = folder => {
   let.await interop_context =
-    Files.Interop_context.read(~file=folder ++ "/tezos.json");
+    Rollup_files.Interop_context.read(~file=folder ++ "/tezos.json");
   Tezos_interop.Consensus.listen_operations(
     ~context=interop_context, ~on_operation=_operation =>
-    print_endline("ass")
+    ()
   );
   Lwt.return_unit;
 };
