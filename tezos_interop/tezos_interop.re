@@ -7,7 +7,6 @@ module Context = {
     rpc_node: Uri.t,
     secret: Secret.t,
     consensus_contract: Address.t,
-    required_confirmations: int,
   };
 };
 module Run_contract = {
@@ -15,7 +14,6 @@ module Run_contract = {
   type input = {
     rpc_node: string,
     secret: string,
-    confirmation: int,
     destination: string,
     entrypoint: string,
     payload: Yojson.Safe.t,
@@ -64,7 +62,6 @@ module Run_contract = {
     let input = {
       rpc_node: context.Context.rpc_node |> Uri.to_string,
       secret: context.secret |> Secret.to_string,
-      confirmation: context.required_confirmations,
       destination: Address.to_string(destination),
       entrypoint,
       payload,
@@ -99,66 +96,64 @@ let michelson_of_yojson = json => {
 };
 type michelson =
   Tezos_micheline.Micheline.node(int, Pack.Michelson_v1_primitives.prim);
-module Fetch_storage: {
-  let run:
-    (~rpc_node: Uri.t, ~confirmation: int, ~contract_address: Address.t) =>
-    Lwt.t(result(michelson, string));
-} = {
-  [@deriving to_yojson]
-  type input = {
-    rpc_node: string,
-    confirmation: int,
-    contract_address: string,
-  };
-  let output_of_yojson = json => {
-    module T = {
-      [@deriving of_yojson({strict: false})]
-      type t = {status: string}
-      and finished = {storage: michelson}
-      and error = {error: string};
-    };
-    let.ok {status} = T.of_yojson(json);
-    switch (status) {
-    | "success" =>
-      let.ok {storage} = T.finished_of_yojson(json);
-      Ok(storage);
-    | "error" =>
-      let.ok T.{error: errorMessage} = T.error_of_yojson(json);
-      Error(errorMessage);
-    | _ =>
-      Error(
-        "JSON output %s did not contain 'success' or 'error' for field `status`",
-      )
-    };
-  };
+// module Fetch_storage: {
+//   let run:
+//     (~rpc_node: Uri.t, ~contract_address: Address.t) =>
+//     Lwt.t(result(michelson, string));
+// } = {
+//   [@deriving to_yojson]
+//   type input = {
+//     rpc_node: string,
+//     contract_address: string,
+//   };
+//   let output_of_yojson = json => {
+//     module T = {
+//       [@deriving of_yojson({strict: false})]
+//       type t = {status: string}
+//       and finished = {storage: michelson}
+//       and error = {error: string};
+//     };
+//     let.ok {status} = T.of_yojson(json);
+//     switch (status) {
+//     | "success" =>
+//       let.ok {storage} = T.finished_of_yojson(json);
+//       Ok(storage);
+//     | "error" =>
+//       let.ok T.{error: errorMessage} = T.error_of_yojson(json);
+//       Error(errorMessage);
+//     | _ =>
+//       Error(
+//         "JSON output %s did not contain 'success' or 'error' for field `status`",
+//       )
+//     };
+//   };
 
-  // TODO: stop hard coding this
-  let command = "node";
-  let file = {
-    let.await (file, oc) = Lwt_io.open_temp_file(~suffix=".js", ());
-    let.await () = Lwt_io.write(oc, [%blob "fetch_storage.bundle.js"]);
-    await(file);
-  };
-  let file = Lwt_main.run(file);
+//   // TODO: stop hard coding this
+//   let command = "node";
+//   let file = {
+//     let.await (file, oc) = Lwt_io.open_temp_file(~suffix=".js", ());
+//     let.await () = Lwt_io.write(oc, [%blob "fetch_storage.bundle.js"]);
+//     await(file);
+//   };
+//   let file = Lwt_main.run(file);
 
-  let run = (~rpc_node, ~confirmation, ~contract_address) => {
-    let input = {
-      rpc_node: Uri.to_string(rpc_node),
-      confirmation,
-      contract_address: Address.to_string(contract_address),
-    };
-    let.await output =
-      Lwt_process.pmap(
-        (command, [|command, file|]),
-        Yojson.Safe.to_string(input_to_yojson(input)),
-      );
+//   let run = (~rpc_node, ~contract_address) => {
+//     let input = {
+//       rpc_node: Uri.to_string(rpc_node),
+//       contract_address: Address.to_string(contract_address),
+//     };
+//     let.await output =
+//       Lwt_process.pmap(
+//         (command, [|command, file|]),
+//         Yojson.Safe.to_string(input_to_yojson(input)),
+//       );
 
-    switch (Yojson.Safe.from_string(output) |> output_of_yojson) {
-    | Ok(storage) => await(Ok(storage))
-    | Error(error) => await(Error(error))
-    };
-  };
-};
+//     switch (Yojson.Safe.from_string(output) |> output_of_yojson) {
+//     | Ok(storage) => await(Ok(storage))
+//     | Error(error) => await(Error(error))
+//     };
+//   };
+// };
 
 module Listen_transactions = {
   [@deriving of_yojson]
@@ -172,7 +167,6 @@ module Listen_transactions = {
     [@deriving to_yojson]
     type input = {
       rpc_node: string,
-      confirmation: int,
       destination: string,
     };
     let file = {
@@ -194,7 +188,6 @@ module Listen_transactions = {
       let input =
         {
           rpc_node: Uri.to_string(context.Context.rpc_node),
-          confirmation: context.required_confirmations,
           destination: Address.to_string(destination),
         }
         |> input_to_yojson
@@ -281,8 +274,6 @@ module Consensus = {
       state_hash,
       validators,
     };
-    // TODO: what should this code do with the output? Retry?
-    //      return back that it was a failure?
     let.await _ =
       Run_contract.run(
         ~context,
@@ -294,13 +285,12 @@ module Consensus = {
   };
 
   type parameters =
-    | Deposit({
-        ticket: Ticket_id.t,
-        // TODO: proper type for amounts
-        amount: Z.t,
-        destination: Address.t,
+    | Submit(Bytes.t)
+    | Commit({
+        level: Z.t,
+        state_hash: BLAKE2B.t,
       })
-    | Update_root_hash(BLAKE2B.t);
+    | Join;
   type operation = {
     hash: Operation_hash.t,
     index: int,
@@ -309,12 +299,22 @@ module Consensus = {
 
   let parse_parameters = (entrypoint, micheline) =>
     switch (entrypoint, micheline) {
-    | ("commit", Micheline.Prim(_, Michelson_v1_primitives.D_Pair,[Int(_,level), Bytes(_,state_hash)],_)) => 
-    print_endline("commit")
-    None
+    | (
+        "commit",
+        Micheline.Prim(
+          _,
+          Michelson_v1_primitives.D_Pair,
+          [Int(_, level), Bytes(_, state_hash)],
+          _,
+        ),
+      ) =>
+      let.some state_hash =
+        state_hash |> Bytes.to_string |> BLAKE2B.of_raw_string;
+      Some(Commit({level, state_hash}));
     | ("submit", Micheline.Bytes(_, submission)) =>
       Printf.printf("Bytes:  %s\n", Bytes.to_string(submission));
-      None;
+      Some(Submit(submission));
+    | ("join", _) => Some(Join)
     | _ => None
     };
   let parse_operation = output => {
@@ -335,42 +335,6 @@ module Consensus = {
       ~destination=context.consensus_contract,
       ~on_message,
     );
-  };
-  let fetch_validators = (~context) => {
-    let Context.{rpc_node, required_confirmations, consensus_contract, _} = context;
-    let micheline_to_validators =
-      fun
-      | Ok(
-          Micheline.Prim(
-            _,
-            Michelson_v1_primitives.D_Pair,
-            [Prim(_, D_Pair, [_, Seq(_, key_hashes)], _), _, _],
-            _,
-          ),
-        ) => {
-          List.fold_left_ok(
-            (acc, k) =>
-              switch (k) {
-              | Micheline.String(_, k) =>
-                switch (Key_hash.of_string(k)) {
-                | Some(k) => Ok([k, ...acc])
-                | None => Error("Failed to parse " ++ k)
-                }
-              | _ => Error("Some key_hash wasn't of type string")
-              },
-            [],
-            List.rev(key_hashes),
-          );
-        }
-      | Ok(_) => Error("Failed to parse storage micheline expression")
-      | Error(msg) => Error(msg);
-    let.await micheline_storage =
-      Fetch_storage.run(
-        ~confirmation=required_confirmations,
-        ~rpc_node,
-        ~contract_address=consensus_contract,
-      );
-    Lwt.return(micheline_to_validators(micheline_storage));
   };
 };
 

@@ -7,12 +7,10 @@ module Context: {
     rpc_node: Uri.t,
     secret: Secret.t,
     consensus_contract: Address.t,
-    required_confirmations: int,
   };
 };
 
 module Consensus: {
-  /** ~signatures should be in the same order as the old validators */
   let commit_state_hash:
     (
       ~context: Context.t,
@@ -27,13 +25,12 @@ module Consensus: {
     Lwt.t(unit);
 
   type parameters =
-    | Deposit({
-        ticket: Ticket_id.t,
-        // TODO: proper type for amounts
-        amount: Z.t,
-        destination: Address.t,
+    | Submit(Bytes.t)
+    | Commit({
+        level: Z.t,
+        state_hash: BLAKE2B.t,
       })
-    | Update_root_hash(BLAKE2B.t);
+    | Join;
   type operation = {
     hash: Operation_hash.t,
     index: int,
@@ -41,8 +38,6 @@ module Consensus: {
   };
   let listen_operations:
     (~context: Context.t, ~on_operation: operation => unit) => unit;
-  let fetch_validators:
-    (~context: Context.t) => Lwt.t(result(list(Key_hash.t), string));
 };
 
 module Discovery: {let sign: (Secret.t, ~nonce: int64, Uri.t) => Signature.t;};

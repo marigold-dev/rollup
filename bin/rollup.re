@@ -45,7 +45,6 @@ let _print_error = err => {
 };
 
 let node = folder => {
-  let.await identity = Files.Identity.read(~file=folder ++ "/identity.json");
   let.await interop_context =
     Files.Interop_context.read(~file=folder ++ "/tezos.json");
   Tezos_interop.Consensus.listen_operations(
