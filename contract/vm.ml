@@ -5,7 +5,7 @@ type action
 
 type t
 
-type step = nat 
+type step = nat
 
 let execute_step : t -> t = assert false
 

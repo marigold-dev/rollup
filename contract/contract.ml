@@ -1,7 +1,6 @@
 open Tezos_environment
 open Common
 
-
 (* anyone can defend a commit *)
 let current_level = Tezos.level
 
@@ -9,11 +8,9 @@ let sender = Tezos.sender
 
 type level = nat
 
-
 (* TODO: calculate worse scenarion, how much money honest needs *)
 (* TODO: submit hash only *)
 type submission = bytes
-
 
 type rejection = { operation_id : int; proof : bytes }
 
@@ -89,7 +86,7 @@ end
   6. R gives the proof from h_n to h_n+1 and replays it
   7. We see who was correct between R and C
 *)
- module Rejection_game = struct
+module Rejection_game = struct
   type expecting = Rejector | Committer
 
   type state =
@@ -353,7 +350,7 @@ let exit (storage : storage) =
     | None -> failwith "failed to send your money back"
   in
   let transaction = Tezos.transaction () stake_amount contract in
-  ([ transaction ], { levels; trusted_level; collateral_vault ; blacklist})
+  ([ transaction ], { levels; trusted_level; collateral_vault; blacklist })
 
 let round_time = 10n
 
@@ -388,7 +385,7 @@ last interaction must be older than a single round
 let is_finalized_level : level -> storage -> bool = assert false
 
 let commit (level : level) (new_state_hash : state_hash) (storage : storage) =
-  let { levels; trusted_level; collateral_vault; blacklist} = storage in
+  let { levels; trusted_level; collateral_vault; blacklist } = storage in
 
   let () = assert (Collateral_vault.has_stake sender collateral_vault) in
   let () = assert (is_open_level level) in
@@ -458,6 +455,5 @@ let main ((action, storage) : parameter * storage) =
   | _ -> assert false
 
 (*TODO: structure this better *)
- module Vm = Vm 
- module Common = Common
-
+module Vm = Vm
+module Common = Common

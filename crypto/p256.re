@@ -55,7 +55,7 @@ module Key_hash = {
   type t = BLAKE2B_20.t;
 
   let of_key = t =>
-    BLAKE2B_20.hash(pub_to_cstruct(~compress=true,t) |> Cstruct.to_string);
+    BLAKE2B_20.hash(pub_to_cstruct(~compress=true, t) |> Cstruct.to_string);
 
   include Encoding_helpers.Make_b58({
     type nonrec t = t;
