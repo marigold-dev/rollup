@@ -1,0 +1,3 @@
+(test
+ (name rollup_test)
+ (libraries alcotest rollup_lib))
