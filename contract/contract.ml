@@ -454,3 +454,6 @@ let main ((action, storage) : parameter * storage) =
       let storage = trust_commit state_hash level storage in
       (([] : operation list), storage) *)
   | _ -> assert false
+
+ module Vm = Vm 
+ 
