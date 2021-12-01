@@ -6,6 +6,7 @@
   "devDependencies": {
     "@opam/ocamlformat": "*",
     "@opam/ocamlformat-rpc": "*",
-    "@opam/ocaml-lsp-server": "*"
+    "@opam/ocaml-lsp-server": "*",
+    "@opam/alcotest": "*"
   }
 }
