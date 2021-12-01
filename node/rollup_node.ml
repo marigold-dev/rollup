@@ -1,21 +1,23 @@
-type state_hash = bytes
-
-type nat = nativeint
-
-type step = nat
-
-type tezos_event = Commit_transaction | Submission_transaction
+open Contract.Common
 
 module type Side_effects = sig
-  type t
-
-  val do_tezos_thing : unit -> unit
+  val join : unit -> unit
+  val exit : unit -> unit 
+  val commit : Contract.commit -> unit
+  val start_rejection_game : Contract.new_rejection_game -> unit
+  val define_steps_for_rejection_game  : Contract.rejection_game_id * Contract.Vm.step
 end
+
+type tezos_event = 
+| Submit_event of Contract.submission
+| Commit_event  of Contract.commit
+| Start_rejection_game_event of Contract.new_rejection_game
+| Define_steps_for_rejection_game of Contract.new_rejection_game * Contract.Vm.step
+| Send_middle_hash of Contract.rejection_game_id * state_hash
 
 module State_machine (E : Side_effects) = struct
   type state = {
     current_level : int;
-    current_hash : state_hash;
     vm_state : Contract.Vm.t;
   }
 

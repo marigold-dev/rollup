@@ -27,8 +27,10 @@ type rejection_game_id = nat
 type new_rejection_game = {
   level : level;
   state_hash : state_hash;
-  steps : step;
+  steps : Vm.step;
 }
+
+type commit = level * state_hash
 
 type parameter =
   (* users *)
@@ -36,10 +38,10 @@ type parameter =
   (* validators *)
   | Join
   | Exit
-  | Commit of level * state_hash
+  | Commit of commit
   (* | Trust_commit of level * state_hash *)
   | Start_rejection_game of new_rejection_game
-  | Define_steps_for_rejection_game of rejection_game_id * step
+  | Define_steps_for_rejection_game of rejection_game_id * Vm.step
   | Send_middle_hash of rejection_game_id * state_hash
 
 (* TODO: split in two state machines, rejection game and optimistic rollup *)
@@ -91,15 +93,15 @@ end
   type expecting = Rejector | Committer
 
   type state =
-    | Starting of { rejector_final : state_hash * step }
+    | Starting of { rejector_final : state_hash * Vm.step }
     | Waiting_midpoint of {
-        initial : state_hash * step;
-        final : state_hash * step * expecting;
+        initial : state_hash * Vm.step;
+        final : state_hash * Vm.step * expecting;
       }
     | Vote_on_midpoint of {
-        initial : state_hash * step;
-        mid : state_hash * step;
-        final : state_hash * step * expecting;
+        initial : state_hash * Vm.step;
+        mid : state_hash * Vm.step;
+        final : state_hash * Vm.step * expecting;
       }
     | To_replay of {
         state_hash : state_hash;
@@ -109,7 +111,7 @@ end
   type vote = Agree | Disagree
 
   type action =
-    | Define_steps of step
+    | Define_steps of Vm.step
     | Send_hash of state_hash
     (* TODO: vote *)
     | Vote of vote
@@ -198,7 +200,7 @@ end = struct
 end
 
 (* THE IMPORTANT THING IS WE'RE BURNING SOMEONE'S MONEY *)
-type commit = { sender : address; rejections : Rejection_lazy_map.t }
+type commit_data = { sender : address; rejections : Rejection_lazy_map.t }
 
 module Commit_lazy_map : sig
   type t
@@ -210,7 +212,7 @@ module Commit_lazy_map : sig
   val append : state_hash -> t -> t option
 
   (* O(log n) *)
-  val find_opt : state_hash -> t -> commit option
+  val find_opt : state_hash -> t -> commit_data option
 
   (* O(log n) *)
   val mem : state_hash -> t -> bool
@@ -218,7 +220,7 @@ module Commit_lazy_map : sig
   (* O(1) *)
   val length : t -> nat
 end = struct
-  type t = { length : nat; items : (state_hash, commit) big_map }
+  type t = { length : nat; items : (state_hash, commit_data) big_map }
 
   let empty () = { length = 0n; items = Big_map.empty }
 
@@ -455,5 +457,7 @@ let main ((action, storage) : parameter * storage) =
       (([] : operation list), storage) *)
   | _ -> assert false
 
+(*TODO: structure this better *)
  module Vm = Vm 
- 
+ module Common = Common
+
