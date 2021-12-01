@@ -1,59 +1,20 @@
-type nat = nativeint
-type (_, _) big_map
-type (_, _) map
-type _ set
-type mutez = nat
-type tez = nat
-type operation
-type address
-type _ contract
-let ( + ) : nat -> nat -> nat = assert false
-let ( - ) : nat -> nat -> int = assert false
-let ( * ) : nat -> nat -> nat = assert false
-let ( < ) : nat -> nat -> bool = assert false
-let ( >= ) : nat -> nat -> bool = assert false
-let min : nat -> nat -> nat = assert false
-let ( / ) : nat -> nat -> (nat * nat) option = assert false
+open Tezos_environment
+open Common
 
-let abs : int -> nat = assert false
-
-module rec Tezos : sig
-  val level : nat
-  val amount : tez
-  val sender : address
-
-  val transaction : 'parameter -> mutez -> 'parameter contract -> operation
-  val get_contract_opt : address -> 'parameter contract option
-end =
-  Tezos
-module rec Big_map : sig
-  val empty : ('key, 'value) big_map
-  val find_opt : 'key -> ('key, 'value) big_map -> 'value option
-
-  val add : 'key -> 'value -> ('key, 'value) big_map -> ('key, 'value) big_map
-  val remove : 'key -> ('key, 'value) big_map -> ('key, 'value) big_map
-  val mem : 'key -> ('key, 'value) big_map -> bool
-end =
-  Big_map
-module rec Set : sig
-  val add : 'el -> 'el set -> 'el set
-  val empty : 'a set
-  val cardinal : 'a set -> nat
-  val fold : ('acc * 'el -> 'acc) -> 'el set -> 'acc -> 'acc
-end =
-  Set
 
 (* anyone can defend a commit *)
 let current_level = Tezos.level
+
 let sender = Tezos.sender
 
 type level = nat
-type step = nat
+
 
 (* TODO: calculate worse scenarion, how much money honest needs *)
 (* TODO: submit hash only *)
 type submission = bytes
-type state_hash = bytes
+
+
 type rejection = { operation_id : int; proof : bytes }
 
 (* TODO: put all required money to be a honest validator on the contract before starting rejections or commits *)
@@ -62,11 +23,13 @@ type rejection = { operation_id : int; proof : bytes }
 
 (* TODO: batch parameter to be more efficient in gas*)
 type rejection_game_id = nat
+
 type new_rejection_game = {
   level : level;
   state_hash : state_hash;
   steps : step;
 }
+
 type parameter =
   (* users *)
   | Submit of submission
@@ -87,6 +50,7 @@ type commitments = {
 }
 
 let stake_amount : mutez = assert false
+
 let commitment_amount : tez = (* 1000tz *) assert false
 
 module Collateral_vault : sig
@@ -123,31 +87,9 @@ end
   6. R gives the proof from h_n to h_n+1 and replays it
   7. We see who was correct between R and C
 *)
-module VM : sig
-  type action
-  type t
-
-  val execute_step : t -> t
-
-  val apply : action -> t -> t
-
-  val hash : t -> state_hash
-  val step : t -> step
-end = struct
-  type action
-  type t
-
-  type error = Missing_data
-  let execute_step _ = assert false
-
-  let apply _ _ = assert false
-
-  let hash _ = assert false
-  let step _ = assert false
-end
-
-module Rejection_game = struct
+ module Rejection_game = struct
   type expecting = Rejector | Committer
+
   type state =
     | Starting of { rejector_final : state_hash * step }
     | Waiting_midpoint of {
@@ -163,13 +105,15 @@ module Rejection_game = struct
         state_hash : state_hash;
         expected : state_hash * expecting;
       }
+
   type vote = Agree | Disagree
+
   type action =
     | Define_steps of step
     | Send_hash of state_hash
     (* TODO: vote *)
     | Vote of vote
-    | Replay of VM.t
+    | Replay of Vm.t
 
   (* TODO: proof showing that committer always agrees with initial hash *)
   (* TODO: proof showing that committer always disagrees with final hash *)
@@ -213,18 +157,18 @@ module Rejection_game = struct
     | To_replay { state_hash; expected }, Rejector, Replay state ->
         (* TODO: analyze this,
             if it fails it will reject and the rejector will timeout eventually *)
-        let () = assert (VM.hash state = state_hash) in
-        let state' = VM.execute_step state in
+        let () = assert (Vm.hash state = state_hash) in
+        let state' = Vm.execute_step state in
 
         let expected_hash, expected_author = expected in
         let revert = function Rejector -> Committer | Committer -> Rejector in
-        let winner =
-          if VM.hash state' = expected_hash then expected_author
+        let expected = failwith "Edu, this doesn't compile" in
+        let _winner =
+          if Vm.hash state' = expected_hash then expected_author
           else revert expected_author
         in
-        let () = assert (VM.hash state' <> expected) in
-        let z = match x with x -> x in
-        ()
+        let () = assert (Vm.hash state' <> expected) in
+        failwith "Edu, this doesn't compile"
     | _ -> assert false
 end
 
@@ -234,12 +178,12 @@ module Rejection_lazy_map : sig
   val empty : unit -> t
 
   (* O(log n) *)
-  val append : rejection_game -> t -> t option
+  val append : rejection_game_id -> t -> t option
 
   (* O(log n) *)
-  val find_opt : t -> rejection_game option
+  val find_opt : t -> rejection_game_id option
 end = struct
-  type t = { length : nat; items : (address, rejection_game) big_map }
+  type t = { length : nat; items : (address, rejection_game_id) big_map }
 
   let empty () = { length = 0n; items = Big_map.empty }
 
@@ -275,7 +219,9 @@ module Commit_lazy_map : sig
   val length : t -> nat
 end = struct
   type t = { length : nat; items : (state_hash, commit) big_map }
+
   let empty () = { length = 0n; items = Big_map.empty }
+
   let append state_hash t =
     if Big_map.mem state_hash t.items then None
     else
@@ -285,6 +231,7 @@ end = struct
       Some { length; items }
 
   let find_opt state_hash t = Big_map.find_opt state_hash t.items
+
   let mem state_hash t = Big_map.mem state_hash t.items
 
   let length t = t.length
@@ -305,25 +252,34 @@ module Submission_lazy_map : sig
   val length : t -> nat
 end = struct
   type t = { length : nat; items : (nat, submission) big_map }
+
   let empty () = { length = 0n; items = Big_map.empty }
+
   let append submission t =
     let length = t.length + 1n in
     let items = Big_map.add t.length submission t.items in
     { length; items }
 
   let find_opt index t = Big_map.find_opt index t.items
+
   let length t = t.length
 end
 
 module Committers_lazy_set : sig
   type t
+
   val empty : unit -> t
+
   val append : address -> t -> t option
+
   val mem : address -> t -> bool
 end = struct
   type t = (address, unit) big_map
+
   let empty () = Big_map.empty
+
   let mem address t = Big_map.mem address t
+
   let append address t =
     if mem address t then None
     else
@@ -338,6 +294,7 @@ module Level_data = struct
     commits : Commit_lazy_map.t;
     committers : Committers_lazy_set.t;
   }
+
   let empty () =
     {
       submissions = Submission_lazy_map.empty ();
@@ -349,6 +306,7 @@ end
 module Black_list_lazy_map = struct
   type t
 end
+
 type storage = {
   (* TODO: alive : bool; *)
   levels : (level, Level_data.t) big_map;
@@ -362,7 +320,7 @@ type storage = {
 
 (* O(log2 levels) + O(log2 submissions) *)
 let submit (submission : submission) (storage : storage) =
-  let { levels; trusted_level; collateral_vault } = storage in
+  let { levels; trusted_level; collateral_vault; blacklist } = storage in
   let Level_data.{ submissions; commits; committers } =
     match Big_map.find_opt current_level levels with
     | Some level_data -> level_data
@@ -371,19 +329,19 @@ let submit (submission : submission) (storage : storage) =
   let submissions = Submission_lazy_map.append submission submissions in
   let level_data = Level_data.{ submissions; commits; committers } in
   let levels = Big_map.add current_level level_data levels in
-  { levels; trusted_level; collateral_vault }
+  { levels; trusted_level; collateral_vault; blacklist }
 
 (* O(log2 collateral_vault) *)
 let join (storage : storage) =
-  let { levels; trusted_level; collateral_vault } = storage in
+  let { levels; trusted_level; collateral_vault; blacklist } = storage in
   let () = assert (Tezos.amount >= stake_amount) in
   let () = assert (not (Collateral_vault.has_stake sender collateral_vault)) in
   let collateral_vault = Collateral_vault.join sender collateral_vault in
-  { levels; trusted_level; collateral_vault }
+  { levels; trusted_level; collateral_vault; blacklist }
 
 (* O(log2 collateral_vault) + transaction *)
 let exit (storage : storage) =
-  let { levels; trusted_level; collateral_vault } = storage in
+  let { levels; trusted_level; collateral_vault; blacklist } = storage in
   let () = assert (Collateral_vault.has_stake sender collateral_vault) in
   let collateral_vault = Collateral_vault.burn sender collateral_vault in
 
@@ -393,7 +351,7 @@ let exit (storage : storage) =
     | None -> failwith "failed to send your money back"
   in
   let transaction = Tezos.transaction () stake_amount contract in
-  ([ transaction ], { levels; trusted_level; collateral_vault })
+  ([ transaction ], { levels; trusted_level; collateral_vault ; blacklist})
 
 let round_time = 10n
 
@@ -408,6 +366,7 @@ let time_to_respond = 1n * round_time
 (* TODO: trusted level is a finalized level with many conditions ... *)
 (* dead level is a finalized level that is not trusted *)
 let is_open_level (level : level) = level + time_to_respond >= current_level
+
 let is_closed_level (level : level) = not (is_open_level level)
 
 (*
@@ -427,7 +386,7 @@ last interaction must be older than a single round
 let is_finalized_level : level -> storage -> bool = assert false
 
 let commit (level : level) (new_state_hash : state_hash) (storage : storage) =
-  let { levels; trusted_level; collateral_vault } = storage in
+  let { levels; trusted_level; collateral_vault; blacklist} = storage in
 
   let () = assert (Collateral_vault.has_stake sender collateral_vault) in
   let () = assert (is_open_level level) in
@@ -451,7 +410,7 @@ let commit (level : level) (new_state_hash : state_hash) (storage : storage) =
 
   let level_data = Level_data.{ submissions; commits; committers } in
   let levels = Big_map.add level level_data levels in
-  { levels; trusted_level; collateral_vault }
+  { levels; trusted_level; collateral_vault; blacklist }
 
 (* let trust_commit (level : level) (state_hash : state_hash) (storage : storage) =
    let { levels; trusted_level; collateral_vault } = storage in
