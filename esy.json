@@ -7,6 +7,25 @@
     "@opam/ocamlformat": "*",
     "@opam/ocamlformat-rpc": "*",
     "@opam/ocaml-lsp-server": "*",
-    "@opam/alcotest": "*"
+    "@opam/alcotest": "*",
+     "@opam/ppx_deriving": "*",
+    "@opam/ppx_deriving_yojson": "*",
+    "@opam/reason": "3.7.0",
+    "@opam/lwt": "*",
+    "@opam/tezos-micheline": "8.3",
+    "@opam/digestif": "*",
+    "@opam/cmdliner": "1.0.4",
+    "@taquito/taquito": "^9.0.1",
+    "@taquito/signer": "^9.0.1",
+    "@taquito/rpc": "^9.0.1",
+    "webpack": "^5.47.1",
+    "webpack-cli": "^4.7.1",
+    "@opam/ppx_blob": "*",
+    "@opam/secp256k1-internal": "0.2.0",
+    "@opam/bigstring": "*",
+    "@opam/mirage-crypto": "0.10.5",
+    "@opam/mirage-crypto-ec": "0.10.5",
+    "@opam/mirage-crypto-pk": "0.10.5",
+    "@opam/mirage-crypto-rng": "0.10.5"
   }
 }

@@ -1,0 +1,14 @@
+(executable
+ (name rollup)
+ (public_name rollup)
+ (libraries files helpers cmdliner)
+ (modules rollup)
+ (preprocess
+  (pps ppx_deriving.show ppx_deriving_yojson)))
+
+(library
+ (name files)
+ (modules Files)
+ (libraries lwt lwt.unix tezos_interop)
+ (preprocess
+  (pps ppx_deriving_yojson)))
