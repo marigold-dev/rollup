@@ -1,0 +1,3 @@
+(library
+ (name protocol)
+ (libraries tezos_interop crypto tezos))

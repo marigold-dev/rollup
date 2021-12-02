@@ -55,7 +55,6 @@ operationStream.on("data", async (content) => {
   }
   try {
     const hash = content.hash;
-
     let operations = (metadata.internal_operation_results || [])
       .filter(
         (operation) =>

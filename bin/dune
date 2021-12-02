@@ -9,6 +9,6 @@
 (library
  (name files)
  (modules Files)
- (libraries lwt lwt.unix tezos_interop)
+ (libraries lwt lwt.unix tezos_interop node)
  (preprocess
   (pps ppx_deriving_yojson)))

@@ -97,14 +97,36 @@ let michelson_of_yojson = json => {
 type michelson =
   Tezos_micheline.Micheline.node(int, Pack.Michelson_v1_primitives.prim);
 
-module Listen_transactions = {
+module type Script = {let script: string;};
+module BlocksScript: Script = {
+  let script = [%blob "listen_blocks.bundle.js"];
+};
+module TransactionsScript: Script = {
+  let script = [%blob "listen_transactions.bundle.js"];
+};
+
+module Listener_output = {
   [@deriving of_yojson]
-  type output = {
+  type t = {
     hash: string,
     index: int,
+    level: option(int),
     entrypoint: string,
     value: michelson,
   };
+};
+module type Listener = {
+  let listen:
+    (
+      ~context: Context.t,
+      ~destination: Address.t,
+      ~on_message: Listener_output.t => unit
+    ) =>
+    unit;
+};
+
+module Listen_transactions = (Script: Script) : Listener => {
+  include Script;
   module CLI = {
     [@deriving to_yojson]
     type input = {
@@ -113,14 +135,14 @@ module Listen_transactions = {
     };
     let file = {
       let.await (file, oc) = Lwt_io.open_temp_file(~suffix=".js", ());
-      let.await () =
-        Lwt_io.write(oc, [%blob "listen_transactions.bundle.js"]);
+      let.await () = Lwt_io.write(oc, script);
       await(file);
     };
     let file = Lwt_main.run(file);
 
-    let node = "node";
+    let node = "node --no-deprecation";
     let run = (~context, ~destination, ~on_message, ~on_fail) => {
+      let _ = on_message;
       let send = (f, pr, data) => {
         let oc = pr#stdin;
         Lwt.finalize(() => f(oc, data), () => Lwt_io.close(oc));
@@ -146,9 +168,8 @@ module Listen_transactions = {
         Lwt.catch(
           () => {
             let.await line = Lwt_io.read_line(process#stdout);
-            print_endline(line);
             Yojson.Safe.from_string(line)
-            |> output_of_yojson
+            |> Listener_output.of_yojson
             |> Result.get_ok
             |> on_message;
             read_line_until_fails();
@@ -170,61 +191,65 @@ module Listen_transactions = {
     Lwt.async(start);
   };
 };
-module Consensus = {
+
+module BlockOpsListener = Listen_transactions(BlocksScript);
+module OpsListener = Listen_transactions(TransactionsScript);
+
+module Listener = {
   open Pack;
   open Tezos_micheline;
 
-  // TODO: how to test this?
-  let commit_state_hash =
-      (
-        ~context,
-        ~block_hash,
-        ~block_height,
-        ~block_payload_hash,
-        ~state_hash,
-        ~handles_hash,
-        ~validators,
-        ~signatures,
-      ) => {
-    module Payload = {
-      [@deriving to_yojson]
-      type t = {
-        block_hash: BLAKE2B.t,
-        block_height: int64,
-        block_payload_hash: BLAKE2B.t,
-        signatures: list(option(string)),
-        handles_hash: BLAKE2B.t,
-        state_hash: BLAKE2B.t,
-        validators: list(string),
-      };
-    };
-    open Payload;
-    let signatures =
-      // TODO: we should sort the map using the keys
-      List.map(
-        ((_key, signature)) =>
-          Option.map(signature => Signature.to_string(signature), signature),
-        signatures,
-      );
-    let validators = List.map(Key_hash.to_string, validators);
-    let payload = {
-      block_hash,
-      block_height,
-      block_payload_hash,
-      signatures,
-      handles_hash,
-      state_hash,
-      validators,
-    };
-    let.await _ =
-      Run_contract.run(
-        ~context,
-        ~destination=context.Context.consensus_contract,
-        ~entrypoint="update_root_hash",
-        ~payload=Payload.to_yojson(payload),
-      );
-    await();
-  };
+  // // TODO: how to test this?
+  // let commit_state_hash =
+  //     (
+  //       ~context,
+  //       ~block_hash,
+  //       ~block_height,
+  //       ~block_payload_hash,
+  //       ~state_hash,
+  //       ~handles_hash,
+  //       ~validators,
+  //       ~signatures,
+  //     ) => {
+  //   module Payload = {
+  //     [@deriving to_yojson]
+  //     type t = {
+  //       block_hash: BLAKE2B.t,
+  //       block_height: int64,
+  //       block_payload_hash: BLAKE2B.t,
+  //       signatures: list(option(string)),
+  //       handles_hash: BLAKE2B.t,
+  //       state_hash: BLAKE2B.t,
+  //       validators: list(string),
+  //     };
+  //   };
+  //   open Payload;
+  //   let signatures =
+  //     // TODO: we should sort the map using the keys
+  //     List.map(
+  //       ((_key, signature)) =>
+  //         Option.map(signature => Signature.to_string(signature), signature),
+  //       signatures,
+  //     );
+  //   let validators = List.map(Key_hash.to_string, validators);
+  //   let payload = {
+  //     block_hash,
+  //     block_height,
+  //     block_payload_hash,
+  //     signatures,
+  //     handles_hash,
+  //     state_hash,
+  //     validators,
+  //   };
+  //   let.await _ =
+  //     Run_contract.run(
+  //       ~context,
+  //       ~destination=context.Context.consensus_contract,
+  //       ~entrypoint="update_root_hash",
+  //       ~payload=Payload.to_yojson(payload),
+  //     );
+  //   await();
+  // };
 
   type parameters =
     | Submit(Bytes.t)
@@ -238,6 +263,9 @@ module Consensus = {
     index: int,
     parameters,
   };
+  type listener =
+    | Blocks
+    | Ops;
 
   let parse_parameters = (entrypoint, micheline) =>
     switch (entrypoint, micheline) {
@@ -250,8 +278,7 @@ module Consensus = {
           _,
         ),
       ) =>
-      let.some state_hash =
-        state_hash |> Bytes.to_string |> BLAKE2B.of_raw_string;
+      let state_hash = state_hash |> Bytes.to_string |> BLAKE2B.hash;
       Some(Commit({level, state_hash}));
     | ("submit", Micheline.Bytes(_, submission)) =>
       Some(Submit(submission))
@@ -260,18 +287,20 @@ module Consensus = {
     };
   let parse_operation = output => {
     let.some parameters =
-      parse_parameters(output.Listen_transactions.entrypoint, output.value);
+      parse_parameters(output.Listener_output.entrypoint, output.value);
     let.some hash = Operation_hash.of_string(output.hash);
     Some({hash, index: output.index, parameters});
   };
-  let listen_operations = (~context, ~on_operation) => {
+
+  let listen = (~listener, ~context, ~on_operation) => {
+    module Listener = (val listener: Listener);
     let on_message = output => {
       switch (parse_operation(output)) {
       | Some(operation) => on_operation(operation)
       | None => ()
       };
     };
-    Listen_transactions.listen(
+    Listener.listen(
       ~context,
       ~destination=context.consensus_contract,
       ~on_message,

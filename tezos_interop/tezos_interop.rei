@@ -10,20 +10,38 @@ module Context: {
   };
 };
 
-module Consensus: {
-  let commit_state_hash:
+module Run_contract: {
+  type output =
+    | Applied({hash: string})
+    | Failed({hash: string})
+    | Skipped({hash: string})
+    | Backtracked({hash: string})
+    | Unknown({hash: string})
+    | Error(string);
+
+  let run:
     (
       ~context: Context.t,
-      ~block_hash: BLAKE2B.t,
-      ~block_height: int64,
-      ~block_payload_hash: BLAKE2B.t,
-      ~state_hash: BLAKE2B.t,
-      ~handles_hash: BLAKE2B.t,
-      ~validators: list(Key_hash.t),
-      ~signatures: list((Key_hash.t, option(Signature.t)))
+      ~destination: Address.t,
+      ~entrypoint: string,
+      ~payload: Yojson.Safe.t
     ) =>
-    Lwt.t(unit);
+    Lwt.t(output);
+};
+module Listener_output: {type t;};
+module type Listener = {
+  let listen:
+    (
+      ~context: Context.t,
+      ~destination: Address.t,
+      ~on_message: Listener_output.t => unit
+    ) =>
+    unit;
+};
+module BlockOpsListener: Listener;
+module OpsListener: Listener;
 
+module Listener: {
   type parameters =
     | Submit(Bytes.t)
     | Commit({
@@ -36,8 +54,17 @@ module Consensus: {
     index: int,
     parameters,
   };
-  let listen_operations:
-    (~context: Context.t, ~on_operation: operation => unit) => unit;
+  type listener =
+    | Blocks
+    | Ops;
+
+  let listen:
+    (
+      ~listener: (module Listener),
+      ~context: Context.t,
+      ~on_operation: operation => unit
+    ) =>
+    unit;
 };
 
 module Discovery: {let sign: (Secret.t, ~nonce: int64, Uri.t) => Signature.t;};

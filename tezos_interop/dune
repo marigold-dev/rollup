@@ -6,24 +6,31 @@
  (preprocessor_deps
   (file ./run_entrypoint.bundle.js)
   (file ./fetch_storage.bundle.js)
-  (file ./listen_transactions.bundle.js)))
+  (file ./listen_transactions.bundle.js)
+  (file ./listen_blocks.js)))
 
 (rule
  (deps
   ./webpack.config.js
   ./listen_transactions.js
   ./fetch_storage.js
-  ./run_entrypoint.js)
+  ./run_entrypoint.js
+  ./listen_blocks.js)
  (targets
   ./listen_transactions.bundle.js
   ./fetch_storage.bundle.js
-  ./run_entrypoint.bundle.js)
- (mode fallback)
+  ./run_entrypoint.bundle.js
+  ./listen_blocks.bundle.js)
+ (mode promote)
  (action
   (run webpack --env=%{profile})))
 
 (rule
- (deps ./webpack.config.js ./listen_transactions.js ./run_entrypoint.js)
+ (deps
+  ./webpack.config.js
+  ./listen_transactions.js
+  ./run_entrypoint.js
+  ./listen_blocks.js)
  (alias fmt)
  (mode fallback)
  (action

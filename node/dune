@@ -1,3 +1,3 @@
 (library
- (name rollup_node)
- (libraries contract))
+ (name node)
+ (libraries tezos_interop contract))

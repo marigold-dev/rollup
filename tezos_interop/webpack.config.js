@@ -3,6 +3,7 @@ module.exports = (env) => ({
     run_entrypoint: "./run_entrypoint.js",
     fetch_storage: "./fetch_storage.js",
     listen_transactions: "./listen_transactions.js",
+    listen_blocks: "./listen_blocks.js",
   },
   output: {
     filename: "[name].bundle.js",

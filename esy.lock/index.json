@@ -1,5 +1,5 @@
 {
-  "checksum": "79836d17b4da0cac077f2d67b6282fd2",
+  "checksum": "fca45b70ff910ee9f4652c7597cb3c50",
   "root": "rollup@link-dev:./esy.json",
   "node": {
     "yarn-pkg-config@github:esy-ocaml/yarn-pkg-config#db3a0b63883606dd57c54a7158d560d6cba8cd79@d41d8cd9": {
@@ -574,10 +574,8 @@
       "source": { "type": "link-dev", "path": ".", "manifest": "esy.json" },
       "overrides": [],
       "dependencies": [
-        "ocaml@4.12.0@d41d8cd9", "@opam/dune@opam:2.9.1@1e504822"
-      ],
-      "devDependencies": [
         "webpack-cli@4.9.1@d41d8cd9", "webpack@5.64.4@d41d8cd9",
+        "prettier@2.5.0@d41d8cd9", "ocaml@4.12.0@d41d8cd9",
         "@taquito/taquito@9.2.0@d41d8cd9", "@taquito/signer@9.2.0@d41d8cd9",
         "@taquito/rpc@9.2.0@d41d8cd9",
         "@opam/tezos-micheline@opam:8.3@3d86363d",
@@ -586,17 +584,19 @@
         "@opam/ppx_deriving_yojson@opam:3.6.1@faf11a7c",
         "@opam/ppx_deriving@opam:5.2.1@089e5dd3",
         "@opam/ppx_blob@opam:0.7.2@f89ed130",
-        "@opam/ocamlformat-rpc@opam:0.19.0@f32c0739",
-        "@opam/ocamlformat@opam:0.19.0@d7e55490",
-        "@opam/ocaml-lsp-server@opam:1.9.0@671f2077",
         "@opam/mirage-crypto-rng@opam:0.10.5@77f514fc",
         "@opam/mirage-crypto-pk@opam:0.10.5@b93f17b3",
         "@opam/mirage-crypto-ec@opam:0.10.5@88b644fe",
         "@opam/mirage-crypto@opam:0.10.5@da64ef8f",
-        "@opam/lwt@opam:5.5.0@cd185346",
+        "@opam/lwt@opam:5.5.0@cd185346", "@opam/dune@opam:2.9.1@1e504822",
         "@opam/digestif@opam:1.1.0@a8d16625",
         "@opam/cmdliner@opam:1.0.4@93208aac",
-        "@opam/bigstring@opam:0.3@d98556f0",
+        "@opam/bigstring@opam:0.3@d98556f0"
+      ],
+      "devDependencies": [
+        "@opam/ocamlformat-rpc@opam:0.19.0@f32c0739",
+        "@opam/ocamlformat@opam:0.19.0@d7e55490",
+        "@opam/ocaml-lsp-server@opam:1.9.0@671f2077",
         "@opam/alcotest@opam:1.5.0@c3a8eb69"
       ]
     },
@@ -748,6 +748,20 @@
         "react-is@17.0.2@d41d8cd9", "ansi-styles@4.3.0@d41d8cd9",
         "ansi-regex@5.0.1@d41d8cd9", "@jest/types@26.6.2@d41d8cd9"
       ],
+      "devDependencies": []
+    },
+    "prettier@2.5.0@d41d8cd9": {
+      "id": "prettier@2.5.0@d41d8cd9",
+      "name": "prettier",
+      "version": "2.5.0",
+      "source": {
+        "type": "install",
+        "source": [
+          "archive:https://registry.npmjs.org/prettier/-/prettier-2.5.0.tgz#sha1:a6370e2d4594e093270419d9cc47f7670488f893"
+        ]
+      },
+      "overrides": [],
+      "dependencies": [],
       "devDependencies": []
     },
     "pkg-dir@4.2.0@d41d8cd9": {
@@ -1913,14 +1927,14 @@
       ],
       "devDependencies": []
     },
-    "electron-to-chromium@1.4.7@d41d8cd9": {
-      "id": "electron-to-chromium@1.4.7@d41d8cd9",
+    "electron-to-chromium@1.4.8@d41d8cd9": {
+      "id": "electron-to-chromium@1.4.8@d41d8cd9",
       "name": "electron-to-chromium",
-      "version": "1.4.7",
+      "version": "1.4.8",
       "source": {
         "type": "install",
         "source": [
-          "archive:https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.4.7.tgz#sha1:58e0b4ec9096ee1422e4d9e83ceeb05b0cf076eb"
+          "archive:https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.4.8.tgz#sha1:e1b7752ac1a75e39b5dd90cc7e29ea08b351c484"
         ]
       },
       "overrides": [],
@@ -2274,7 +2288,7 @@
       "overrides": [],
       "dependencies": [
         "picocolors@1.0.0@d41d8cd9", "node-releases@2.0.1@d41d8cd9",
-        "escalade@3.1.1@d41d8cd9", "electron-to-chromium@1.4.7@d41d8cd9",
+        "escalade@3.1.1@d41d8cd9", "electron-to-chromium@1.4.8@d41d8cd9",
         "caniuse-lite@1.0.30001283@d41d8cd9"
       ],
       "devDependencies": []

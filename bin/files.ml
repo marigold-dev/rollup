@@ -17,6 +17,14 @@ let write_json to_yojson data ~file =
   in
   Lwt_io.with_file ~mode:Output file callback
 
+module type Rw = sig
+  type t
+
+  val read : file:string -> t Lwt.t
+
+  val write : t -> file:string -> unit Lwt.t
+end
+
 module Interop_context = struct
   module Secret = struct
     include Crypto.Secret
@@ -39,4 +47,12 @@ module Interop_context = struct
   let read = read_json of_yojson
 
   let write = write_json to_yojson
+end
+
+module State_bin = struct
+  let read ~file = Lwt_io.with_file ~mode:Input file Lwt_io.read_value
+
+  let write protocol ~file =
+    let cb out = Lwt_io.write_value out protocol in
+    Lwt_io.with_file ~mode:Output file cb
 end
