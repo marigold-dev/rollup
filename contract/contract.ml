@@ -338,7 +338,7 @@ module Commit_lazy_map : sig
   (* O(1) *)
   val length : t -> nat
 end = struct
-  type t = { length : nat; items : (state_hash, commit) big_map }
+  type t = { length : nat; items : (state_hash, commit_data) big_map }
   let empty () = { length = 0n; items = Big_map.empty }
   let append state_hash t =
     if Big_map.mem state_hash t.items then None

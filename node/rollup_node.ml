@@ -18,11 +18,18 @@ type tezos_event =
   | Send_middle_hash of Contract.rejection_game_id * state_hash
 
 module State_machine (E : Side_effects) = struct
-  type state = { current_level : int; vm_state : Contract.Vm.t }
+  type state = {
+    current_level : int;
+    vm_state : Contract.Vm.t
+  }
 
   type transition
 
-  let transition : state -> transition -> state = assert false
+  let transition : state -> transition -> state = fun state transition ->
+    match transition with
+    | Submit of Contract.submission -> assert false
+    |  
+
 end
 
 let listen_to_events = assert false

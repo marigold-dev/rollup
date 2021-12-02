@@ -1,3 +1,5 @@
 (library
  (name protocol)
- (libraries tezos_interop crypto tezos))
+ (libraries tezos_interop crypto tezos)
+ (preprocess
+  (pps ppx_deriving.ord ppx_deriving.show ppx_deriving_yojson)))
