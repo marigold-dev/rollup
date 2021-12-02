@@ -1,5 +1,6 @@
 open Tezos_environment
 
+(* IMPORTANT: the honest validator will never loose at anything *)
 (* anyone can defend a commit *)
 let current_level = Tezos.level
 
@@ -22,8 +23,11 @@ type rejection = { operation_id : int; proof : bytes }
 type rejection_game_id = nat
 type new_rejection_game = {
   level : level;
-  state_hash : state_hash;
-  steps : step;
+  (* TODO: this needs to be a known state_hash on this level *)
+  committer_state_hash : state_hash;
+  rejector_mid_state_hash : state_hash;
+  rejector_state_hash : state_hash;
+  rejector_steps : step;
 }
 type parameter =
   (* users *)
@@ -34,7 +38,6 @@ type parameter =
   | Commit of level * state_hash * step
   (* | Trust_commit of level * state_hash *)
   | Start_rejection_game of new_rejection_game
-  | Define_steps_for_rejection_game of rejection_game_id * step
   | Send_middle_hash of rejection_game_id * state_hash
 
 (* TODO: split in two state machines, rejection game and optimistic rollup *)
@@ -92,8 +95,9 @@ end = struct
   let hash _ = assert false
 end
 
+type player = Rejector | Committer
 module Rejection_game
-    (* *: sig
+    (* : sig
          type player = Rejector | Committer
 
          type state
@@ -104,18 +108,16 @@ module Rejection_game
            (* TODO: vote *)
            | Vote of vote
            | Replay of VM.t
-           | Claim_timeout
 
          val start :
-           level ->
            previous_state_hash:state_hash ->
            committer_state_hash:state_hash ->
-           committer_steps:rejection_game_id ->
+           committer_steps:step ->
            rejector_state_hash:state_hash ->
-           rejector_steps:rejection_game_id ->
+           rejector_steps:step ->
            rejector_mid_state_hash:state_hash ->
            state
-         val play : level -> player -> action -> state -> state
+         val play : player -> action -> state -> state
          val has_winner : state -> player option
        end *) =
 struct
@@ -123,7 +125,7 @@ struct
   (* TODO: log2 of steps to know maximum of turns instead of holding each individual step, thank you Daniel*)
 
   type player = Rejector | Committer
-  type turn =
+  type state =
     | Vote_on_midpoint of {
         initial : state_hash * step;
         mid : state_hash * step;
@@ -135,16 +137,19 @@ struct
       }
     | To_replay of { state_hash : state_hash; expected : state_hash * player }
     | Winner of player
-  type state = { turn_max_time : level; turn : turn }
 
-  (*
-  0: _, STATE = WAITING: 0 - 10
-  
-  1: R = 5, VOTING: MID 5, 0 - 10
-  2: C = T, WAITING: DEAD 0, 5 - 10
-  3: C' = FORK, WAITING_FORKED: 0 - 5
+  type game_id = nat
+  type nonrec game =
+    | Root of state
+    | Child of {
+        weight : level;
+        parent : game_id;
+        parent_player : player;
+        state : state;
+      }
 
-  *)
+  (* TODO: a game can only have a single fork per level *)
+  let find_game : game_id -> game = assert false
 
   type vote = Agree | Disagree
   type action =
@@ -152,7 +157,6 @@ struct
     (* TODO: vote *)
     | Vote of vote
     | Replay of VM.t
-    | Claim_timeout
 
   let calculate_mid_step ~initial_step ~final_step =
     let diff = abs (final_step - initial_step) in
@@ -160,9 +164,8 @@ struct
     | Some (mid_step, _remainder) -> mid_step
     | None -> assert false
 
-  let start current_level ~previous_state_hash ~committer_state_hash
-      ~committer_steps ~rejector_state_hash ~rejector_steps
-      ~rejector_mid_state_hash =
+  let start ~previous_state_hash ~committer_state_hash ~committer_steps
+      ~rejector_state_hash ~rejector_steps ~rejector_mid_state_hash =
     let final =
       if committer_steps > rejector_steps then
         (rejector_state_hash, rejector_steps, Rejector)
@@ -174,79 +177,123 @@ struct
 
     (* WARNING: *)
     (* VM steps needs to be bigger than 2n*)
+    (* TODO: slash instead of fail *)
     let () = assert (final_step >= 2n) in
     let mid =
       let mid_step = calculate_mid_step ~initial_step ~final_step in
       (rejector_mid_state_hash, mid_step)
     in
-    (* TODO: what if total_steps == 1 *)
-    let turn = Vote_on_midpoint { initial; mid; final } in
-    { turn_max_time = current_level; turn }
+    Vote_on_midpoint { initial; mid; final }
 
   (* TODO: proof showing that committer always agrees with initial hash *)
   (* TODO: proof showing that committer almost always disagrees with final hash *)
 
-  (* empty block has any steps? If so initial will never be equal to final *)
-  let play _current_level player action state =
-    (* let () = assert current_level in *)
-    let turn =
-      match (state.turn, player, action) with
-      | Waiting_midpoint { initial; final }, Rejector, Send_hash mid_hash ->
-          let _initial_hash, initial_step = initial in
-          let _final_hash, final_step, _expecting = final in
-          let diff = abs (final_step - initial_step) in
-          let mid =
-            match diff / 2n with
-            | Some (mid_step, _remainder) -> (mid_hash, mid_step)
-            | None -> assert false
-          in
-          Vote_on_midpoint { initial; mid; final }
-      | Vote_on_midpoint { initial; mid; final }, Committer, Vote vote ->
-          let initial, final =
-            match vote with
-            | Agree -> (mid, final)
-            | Disagree ->
-                let mid_state_hash, mid_step = mid in
-                let final = (mid_state_hash, mid_step, Rejector) in
-                (initial, final)
-          in
-          let initial_hash, initial_step = initial in
-          let final_hash, final_step, expecting = final in
-          if initial_step + 1n = final_step then
-            To_replay
-              { state_hash = initial_hash; expected = (final_hash, expecting) }
-          else Waiting_midpoint { initial; final }
-      | To_replay { state_hash; expected }, Rejector, Replay state ->
-          (* TODO: analyze this,
-              if it fails it will reject and the rejector will timeout eventually *)
-          let () = assert (VM.hash state = state_hash) in
-          let state' = VM.execute_step state in
+  let get_weight game =
+    match game with
+    | Root _ -> 0n
+    | Child { weight; parent = _; parent_player = _; state = _ } -> weight
 
-          let expected_hash, expected_author = expected in
-          let opposite_player = function
-            | Rejector -> Committer
-            | Committer -> Rejector
-          in
-          let winner =
-            if VM.hash state' = expected_hash then expected_author
-            else opposite_player expected_author
-          in
-          Winner winner
-      | _ -> assert false
-    in
-    ()
-  let has_winner state =
-    match state with Winner player -> Some player | _ -> None
+  let get_state game =
+    match game with
+    | Root state -> state
+    | Child { weight = _; parent = _; parent_player = _; state } -> state
+
+  let has_winner game =
+    match get_state game with Winner player -> Some player | _ -> None
+
+  (* empty block has any steps? If so initial will never be equal to final *)
+  let play player action game =
+    let state = get_state game in
+    match (state, player, action) with
+    | Waiting_midpoint { initial; final }, Rejector, Send_hash mid_hash ->
+        let _initial_hash, initial_step = initial in
+        let _final_hash, final_step, _expecting = final in
+        let mid_step = calculate_mid_step ~initial_step ~final_step in
+        let mid = (mid_hash, mid_step) in
+        Vote_on_midpoint { initial; mid; final }
+    | Vote_on_midpoint { initial; mid; final }, Committer, Vote vote ->
+        let initial, final =
+          match vote with
+          | Agree -> (mid, final)
+          | Disagree ->
+              let mid_state_hash, mid_step = mid in
+              let final = (mid_state_hash, mid_step, Rejector) in
+              (initial, final)
+        in
+
+        let initial_hash, initial_step = initial in
+        let final_hash, final_step, expecting = final in
+        if initial_step + 1n = final_step then
+          To_replay
+            { state_hash = initial_hash; expected = (final_hash, expecting) }
+        else Waiting_midpoint { initial; final }
+    | To_replay { state_hash; expected }, Rejector, Replay state ->
+        (* TODO: analyze this,
+            if it fails it will reject and the rejector will timeout eventually *)
+        (* TODO: slash instead of fail *)
+        let () = assert (VM.hash state = state_hash) in
+        let state' = VM.execute_step state in
+
+        let expected_hash, expected_author = expected in
+        let opposite_player = function
+          | Rejector -> Committer
+          | Committer -> Rejector
+        in
+        let winner =
+          if VM.hash state' = expected_hash then expected_author
+          else opposite_player expected_author
+        in
+
+        (* a fork only has effect if:
+
+           G is the game that was forked
+           G' is the new game based on G
+
+           A is the player who's game turn was forked
+           B is the player who forked G as A
+
+           If A will lose G
+           AND B wins G'
+
+           The last person to fork and win, is always the honest validator
+        *)
+
+        (*
+you only fork if both sides are wrong
+*)
+        let () =
+          match game with
+          | Root _ -> ()
+          | Child { weight = _; parent; parent_player = _; state = _ } -> (
+              let parent = find_game parent in
+
+              match has_winner parent with
+              | Some _ -> ()
+              | None -> (* TODO: slash instead of fail *) assert false)
+        in
+
+        Winner winner
+    | _ ->
+        (* TODO: slash instead of fail *)
+        assert false
 end
-type rejection_game = Rejection_game.state
+
+type commit_rejection_game = {
+  state : Rejection_game.state;
+  rejector : address;
+}
 
 module Rejection_lazy_map : sig
+  type game_id
+
   type t
 
   val empty : unit -> t
 
   (* O(log n) *)
   val append : rejection_game -> t -> t option
+
+  val fork : unit
 
   (* O(log n) *)
   val find_opt : t -> rejection_game option
@@ -266,7 +313,12 @@ end = struct
 end
 
 (* THE IMPORTANT THING IS WE'RE BURNING SOMEONE'S MONEY *)
-type commit_data = { sender : address; rejections : Rejection_lazy_map.t }
+type commit_data = {
+  committer : address;
+  (* TODO: validate steps is inside of the commit_hash *)
+  steps : step;
+  rejections : Rejection_lazy_map.t;
+}
 
 module Commit_lazy_map : sig
   type t
@@ -364,7 +416,7 @@ end
 type storage = {
   (* TODO: alive : bool; *)
   levels : (level, Level_data.t) big_map;
-  trusted_level : level;
+  trusted : state_hash * level;
   collateral_vault : Collateral_vault.t;
       (* TODO: do we need trusted_state_hash for something?*)
       (* trusted_state_hash : state_hash; *)
@@ -373,7 +425,7 @@ type storage = {
 
 (* O(log2 levels) + O(log2 submissions) *)
 let submit (submission : submission) (storage : storage) =
-  let { levels; trusted_level; collateral_vault } = storage in
+  let { levels; trusted; collateral_vault } = storage in
   let Level_data.{ submissions; commits; committers } =
     match Big_map.find_opt current_level levels with
     | Some level_data -> level_data
@@ -382,19 +434,19 @@ let submit (submission : submission) (storage : storage) =
   let submissions = Submission_lazy_map.append submission submissions in
   let level_data = Level_data.{ submissions; commits; committers } in
   let levels = Big_map.add current_level level_data levels in
-  { levels; trusted_level; collateral_vault }
+  { levels; trusted; collateral_vault }
 
 (* O(log2 collateral_vault) *)
 let join (storage : storage) =
-  let { levels; trusted_level; collateral_vault } = storage in
+  let { levels; trusted; collateral_vault } = storage in
   let () = assert (Tezos.amount >= stake_amount) in
   let () = assert (not (Collateral_vault.has_stake sender collateral_vault)) in
   let collateral_vault = Collateral_vault.join sender collateral_vault in
-  { levels; trusted_level; collateral_vault }
+  { levels; trusted; collateral_vault }
 
 (* O(log2 collateral_vault) + transaction *)
 let exit (storage : storage) =
-  let { levels; trusted_level; collateral_vault } = storage in
+  let { levels; trusted; collateral_vault } = storage in
   let () = assert (Collateral_vault.has_stake sender collateral_vault) in
   let collateral_vault = Collateral_vault.burn sender collateral_vault in
 
@@ -404,7 +456,7 @@ let exit (storage : storage) =
     | None -> failwith "failed to send your money back"
   in
   let transaction = Tezos.transaction () stake_amount contract in
-  ([ transaction ], { levels; trusted_level; collateral_vault })
+  ([ transaction ], { levels; trusted; collateral_vault })
 
 let round_time = 10n
 
@@ -437,8 +489,9 @@ last interaction must be older than a single round
    | None -> true *)
 let is_finalized_level : level -> storage -> bool = assert false
 
-let commit (level : level) (new_state_hash : state_hash) (storage : storage) =
-  let { levels; trusted_level; collateral_vault } = storage in
+let commit (level : level) (new_state_hash : state_hash) (steps : step)
+    (storage : storage) =
+  let { levels; trusted; collateral_vault } = storage in
 
   let () = assert (Collateral_vault.has_stake sender collateral_vault) in
   let () = assert (is_open_level level) in
@@ -462,7 +515,43 @@ let commit (level : level) (new_state_hash : state_hash) (storage : storage) =
 
   let level_data = Level_data.{ submissions; commits; committers } in
   let levels = Big_map.add level level_data levels in
-  { levels; trusted_level; collateral_vault }
+  { levels; trusted; collateral_vault }
+
+let start_rejection_game (new_rejection_game : new_rejection_game)
+    (storage : storage) =
+  let {
+    level;
+    committer_state_hash;
+    rejector_mid_state_hash;
+    rejector_state_hash;
+    rejector_steps;
+  } =
+    new_rejection_game
+  in
+  let { levels; trusted; collateral_vault } = storage in
+
+  let () = assert (Collateral_vault.has_stake sender collateral_vault) in
+  let () = assert (not (is_finalized_level level storage)) in
+
+  let Level_data.{ submissions = _; commits; committers = _ } =
+    match Big_map.find_opt level levels with
+    | Some level_data -> level_data
+    | None -> Level_data.empty ()
+  in
+
+  let { sender = _; steps = committer_steps; rejections } =
+    match Commit_lazy_map.find_opt committer_state_hash commits with
+    | Some commit_data -> commit_data
+    | None -> failwith "invalid committer state hash"
+  in
+
+  let trusted_state_hash, _trusted_level = trusted in
+  let rejection_game =
+    Rejection_game.start ~previous_state_hash:trusted_state_hash
+      ~committer_state_hash ~committer_steps ~rejector_state_hash
+      ~rejector_steps ~rejector_mid_state_hash
+  in
+  ()
 
 (* let trust_commit (level : level) (state_hash : state_hash) (storage : storage) =
    let { levels; trusted_level; collateral_vault } = storage in
@@ -499,8 +588,8 @@ let main ((action, storage) : parameter * storage) =
       let storage = join storage in
       (([] : operation list), storage)
   | Exit -> exit storage
-  | Commit (new_state_hash, level) ->
-      let storage = commit new_state_hash level storage in
+  | Commit (level, state_hash, steps) ->
+      let storage = commit level state_hash steps storage in
       (([] : operation list), storage)
   (* | Trust_commit (state_hash, level) ->
       let storage = trust_commit state_hash level storage in
