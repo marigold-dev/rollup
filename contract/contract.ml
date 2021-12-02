@@ -15,30 +15,23 @@ type submission = bytes
 type state_hash = bytes
 type rejection = { operation_id : int; proof : bytes }
 
+(* TODO: BIG TODO: go over all asserts and slash whoever is needed *)
+
 (* TODO: put all required money to be a honest validator on the contract before starting rejections or commits *)
 
 (* TODO: commits are allowed to also clean a level to avoid paying for increasing the storage *)
 
 (* TODO: batch parameter to be more efficient in gas*)
 type rejection_game_id = nat
+type committer = address
 type new_rejection_game = {
   level : level;
   (* TODO: this needs to be a known state_hash on this level *)
-  committer_state_hash : state_hash;
+  committer : committer;
   rejector_mid_state_hash : state_hash;
   rejector_state_hash : state_hash;
   rejector_steps : step;
 }
-type parameter =
-  (* users *)
-  | Submit of submission
-  (* validators *)
-  | Join
-  | Exit
-  | Commit of level * state_hash * step
-  (* | Trust_commit of level * state_hash *)
-  | Start_rejection_game of new_rejection_game
-  | Send_middle_hash of rejection_game_id * state_hash
 
 (* TODO: split in two state machines, rejection game and optimistic rollup *)
 
@@ -96,35 +89,52 @@ end = struct
 end
 
 type player = Rejector | Committer
-module Rejection_game
-    (* : sig
-         type player = Rejector | Committer
 
-         type state
+(* a fork only has effect if:
 
-         type vote = Agree | Disagree
-         type action =
-           | Send_hash of state_hash
-           (* TODO: vote *)
-           | Vote of vote
-           | Replay of VM.t
+           G is the game that was forked
+           G' is the new game based on G
 
-         val start :
-           previous_state_hash:state_hash ->
-           committer_state_hash:state_hash ->
-           committer_steps:step ->
-           rejector_state_hash:state_hash ->
-           rejector_steps:step ->
-           rejector_mid_state_hash:state_hash ->
-           state
-         val play : player -> action -> state -> state
-         val has_winner : state -> player option
-       end *) =
-struct
+           A is the player who's game turn was forked
+           B is the player who forked G as A
+
+           If A will lose G
+           AND B wins G'
+
+           The last person to fork and win, is always the honest validator
+*)
+(* you only fork if both sides are wrong *)
+let round_time = 10n
+
+let time_to_respond = 1n * round_time
+let time_to_timeout = 2n * round_time
+let cooldown_period = 1n * round_time
+
+module Small_rejection_game : sig
+  type state
+
+  type vote = Agree | Disagree
+  type action =
+    | Send_hash of state_hash
+    (* TODO: vote *)
+    | Vote of vote
+    | Replay of VM.t
+
+  val start :
+    previous_state_hash:state_hash ->
+    committer_state_hash:state_hash ->
+    committer_steps:step ->
+    rejector_state_hash:state_hash ->
+    rejector_steps:step ->
+    rejector_mid_state_hash:state_hash ->
+    state
+  val play : player -> action -> state -> state
+  val expected_player : state -> player option
+  val has_winner : state -> player option
+end = struct
   (* TODO: if we require commit to include steps we can skip a couple turns *)
   (* TODO: log2 of steps to know maximum of turns instead of holding each individual step, thank you Daniel*)
 
-  type player = Rejector | Committer
   type state =
     | Vote_on_midpoint of {
         initial : state_hash * step;
@@ -138,25 +148,11 @@ struct
     | To_replay of { state_hash : state_hash; expected : state_hash * player }
     | Winner of player
 
-  type game_id = nat
-  type nonrec game =
-    | Root of state
-    | Child of {
-        weight : level;
-        parent : game_id;
-        parent_player : player;
-        state : state;
-      }
+  type vote = Agree | Disagree
+  type action = Send_hash of state_hash | Vote of vote | Replay of VM.t
 
   (* TODO: a game can only have a single fork per level *)
-  let find_game : game_id -> game = assert false
-
-  type vote = Agree | Disagree
-  type action =
-    | Send_hash of state_hash
-    (* TODO: vote *)
-    | Vote of vote
-    | Replay of VM.t
+  (* let find_game : game_id -> game = assert false *)
 
   let calculate_mid_step ~initial_step ~final_step =
     let diff = abs (final_step - initial_step) in
@@ -188,22 +184,11 @@ struct
   (* TODO: proof showing that committer always agrees with initial hash *)
   (* TODO: proof showing that committer almost always disagrees with final hash *)
 
-  let get_weight game =
-    match game with
-    | Root _ -> 0n
-    | Child { weight; parent = _; parent_player = _; state = _ } -> weight
-
-  let get_state game =
-    match game with
-    | Root state -> state
-    | Child { weight = _; parent = _; parent_player = _; state } -> state
-
-  let has_winner game =
-    match get_state game with Winner player -> Some player | _ -> None
+  let has_winner state =
+    match state with Winner player -> Some player | _ -> None
 
   (* empty block has any steps? If so initial will never be equal to final *)
-  let play player action game =
-    let state = get_state game in
+  let play player action state =
     match (state, player, action) with
     | Waiting_midpoint { initial; final }, Rejector, Send_hash mid_hash ->
         let _initial_hash, initial_step = initial in
@@ -228,8 +213,6 @@ struct
             { state_hash = initial_hash; expected = (final_hash, expecting) }
         else Waiting_midpoint { initial; final }
     | To_replay { state_hash; expected }, Rejector, Replay state ->
-        (* TODO: analyze this,
-            if it fails it will reject and the rejector will timeout eventually *)
         (* TODO: slash instead of fail *)
         let () = assert (VM.hash state = state_hash) in
         let state' = VM.execute_step state in
@@ -244,44 +227,82 @@ struct
           else opposite_player expected_author
         in
 
-        (* a fork only has effect if:
-
-           G is the game that was forked
-           G' is the new game based on G
-
-           A is the player who's game turn was forked
-           B is the player who forked G as A
-
-           If A will lose G
-           AND B wins G'
-
-           The last person to fork and win, is always the honest validator
-        *)
-
-        (*
-you only fork if both sides are wrong
-*)
-        let () =
-          match game with
-          | Root _ -> ()
-          | Child { weight = _; parent; parent_player = _; state = _ } -> (
-              let parent = find_game parent in
-
-              match has_winner parent with
-              | Some _ -> ()
-              | None -> (* TODO: slash instead of fail *) assert false)
-        in
-
         Winner winner
     | _ ->
         (* TODO: slash instead of fail *)
         assert false
+
+  let expected_player state =
+    match state with
+    | Waiting_midpoint _ -> Some Rejector
+    | Vote_on_midpoint _ -> Some Committer
+    | To_replay _ -> Some Rejector
+    | Winner _ -> None
 end
 
-type commit_rejection_game = {
-  state : Rejection_game.state;
-  rejector : address;
-}
+module Large_rejection_game : sig
+  open Small_rejection_game
+
+  type state
+  val has_winner : state -> player option
+
+  val start :
+    previous_state_hash:state_hash ->
+    committer_state_hash:state_hash ->
+    committer_steps:step ->
+    rejector_state_hash:state_hash ->
+    rejector_steps:step ->
+    rejector_mid_state_hash:state_hash ->
+    state
+
+  val play : player -> action -> state -> state
+  val timeout : player -> state -> state
+  val fork : player -> action -> state -> state
+end = struct
+  open Small_rejection_game
+  type nonrec state = {
+    previous_state : state;
+    previous_action : action;
+    (* previous_action_level : level; *)
+    current_state : state;
+  }
+
+  type nonrec action = Play of action | Claim_timeout | Fork of action
+
+  let assert_is_expected_player player state =
+    (* TODO: slash instead of fail *)
+    match expected_player state.current_state with
+    | None -> failwith "game already finished"
+    | Some expected_player when player = expected_player -> ()
+    | Some _ -> failwith "not your turn"
+
+  let play player action state =
+    (* TODO: maybe derive player from the action itself??? *)
+    (* let () = state in *)
+    let () = assert_is_expected_player player state in
+    (* let () = assert (not (is_cooldown )) *)
+    (* let x = 1 in *)
+    state
+
+  let timeout = assert false
+  let fork player action state =
+    let { previous_state; previous_action; current_state = _ } = state in
+    let () =
+      (* TODO: slash instead of fail *)
+      match (state.previous_action, action) with
+      | Send_hash previous_hash, Send_hash alternative_hash
+        when previous_hash <> alternative_hash ->
+          ()
+      | Vote Disagree, Vote Agree -> ()
+      | Vote Agree, Vote Disagree -> ()
+      | Replay _, Replay _ ->
+          (* TODO: maybe if we slash this can be the case??? *)
+          failwith "cannot fork a replay, same result"
+      | _ -> failwith "invalid movement for this fork"
+    in
+    let x = play in
+    state
+end
 
 module Rejection_lazy_map : sig
   type game_id
@@ -291,7 +312,7 @@ module Rejection_lazy_map : sig
   val empty : unit -> t
 
   (* O(log n) *)
-  val append : rejection_game -> t -> t option
+  val append : rejector:address -> Large_rejection_game.state -> t -> t option
 
   val fork : unit
 
@@ -313,41 +334,77 @@ end = struct
 end
 
 (* THE IMPORTANT THING IS WE'RE BURNING SOMEONE'S MONEY *)
-type commit_data = {
-  committer : address;
-  (* TODO: validate steps is inside of the commit_hash *)
-  steps : step;
-  rejections : Rejection_lazy_map.t;
-}
 
-module Commit_lazy_map : sig
+module Commit : sig
+  type t
+
+  val make : state_hash -> step -> t
+
+  val state_hash : t -> state_hash
+  val steps : t -> step
+
+  (* O(log n) *)
+  (* [append_rejection ~rejector rejection commit] None when duplicated *)
+  val append_rejection :
+    rejector:address -> Large_rejection_game.state -> t -> t option
+end = struct
+  type t = {
+    state_hash : state_hash;
+    (* TODO: validate steps is inside of the commit_hash *)
+    steps : step;
+    rejections : Rejection_lazy_map.t;
+  }
+
+  let make state_hash steps =
+    { state_hash; steps; rejections = Rejection_lazy_map.empty () }
+
+  let state_hash t = t.state_hash
+  let steps t = t.steps
+
+  let append_rejection ~rejector rejection t =
+    let { state_hash; steps; rejections } = t in
+    match Rejection_lazy_map.append ~rejector rejection rejections with
+    | Some rejections -> Some { state_hash; steps; rejections }
+    | None -> None
+end
+
+module Committer_lazy_map : sig
   type t
 
   val empty : unit -> t
 
   (* O(log n) *)
   (* [append state_hash] None when duplicated *)
-  val append : state_hash -> t -> t option
+  val append : committer -> Commit.t -> t -> t option
 
   (* O(log n) *)
-  val find_opt : state_hash -> t -> commit_data option
+  (* [update committer commit t] None when missing update *)
+  val update : committer -> Commit.t -> t -> t option
 
   (* O(log n) *)
-  val mem : state_hash -> t -> bool
+  val find_opt : committer -> t -> Commit.t option
+
+  (* O(log n) *)
+  val mem : committer -> t -> bool
 
   (* O(1) *)
+  (* TODO: why do we need the length???*)
   val length : t -> nat
 end = struct
-  type t = { length : nat; items : (state_hash, commit_data) big_map }
+  type t = { length : nat; items : (committer, Commit.t) big_map }
   let empty () = { length = 0n; items = Big_map.empty }
-  let append state_hash t =
-    if Big_map.mem state_hash t.items then None
+  let append committer commit t =
+    if Big_map.mem committer t.items then None
     else
-      let commit = { sender; rejections = Rejection_lazy_map.empty () } in
       let length = t.length + 1n in
-      let items = Big_map.add state_hash commit t.items in
+      let items = Big_map.add committer commit t.items in
       Some { length; items }
-
+  let update committer commit t =
+    (* TODO: this is unneeded but hmm *)
+    if Big_map.mem committer t.items then
+      let items = Big_map.add committer commit t.items in
+      Some { length = t.length; items }
+    else None
   let find_opt state_hash t = Big_map.find_opt state_hash t.items
   let mem state_hash t = Big_map.mem state_hash t.items
 
@@ -379,34 +436,16 @@ end = struct
   let length t = t.length
 end
 
-module Committers_lazy_set : sig
-  type t
-  val empty : unit -> t
-  val append : address -> t -> t option
-  val mem : address -> t -> bool
-end = struct
-  type t = (address, unit) big_map
-  let empty () = Big_map.empty
-  let mem address t = Big_map.mem address t
-  let append address t =
-    if mem address t then None
-    else
-      let t = Big_map.add address () t in
-      Some t
-end
-
 (* TODO: abstract this *)
 module Level_data = struct
   type t = {
     submissions : Submission_lazy_map.t;
-    commits : Commit_lazy_map.t;
-    committers : Committers_lazy_set.t;
+    committers : Committer_lazy_map.t;
   }
   let empty () =
     {
       submissions = Submission_lazy_map.empty ();
-      commits = Commit_lazy_map.empty ();
-      committers = Committers_lazy_set.empty ();
+      committers = Committer_lazy_map.empty ();
     }
 end
 
@@ -414,25 +453,35 @@ module Black_list_lazy_map = struct
   type t
 end
 type storage = {
-  (* TODO: alive : bool; *)
   levels : (level, Level_data.t) big_map;
   trusted : state_hash * level;
-  collateral_vault : Collateral_vault.t;
-      (* TODO: do we need trusted_state_hash for something?*)
-      (* trusted_state_hash : state_hash; *)
-      (* TODO: use unique identity instead of blacklist *)
+  collateral_vault : Collateral_vault.t; (* TODO: alive : bool; *)
 }
+type parameter =
+  (* users *)
+  | Submit of submission
+  (* validators *)
+  | Join
+  | Exit
+  | Commit of level * state_hash * step
+  (* | Trust_commit of level * state_hash *)
+  | Start_rejection_game of new_rejection_game
+  | Send_middle_hash of { committer : address; state_hash : state_hash }
+  | Vote_on_middle of { rejector : address; vote : Small_rejection_game.vote }
+  | Replay of { committer : address; state : VM.t }
+  | Fork_commit of { committer : address }
+  | Fork_game of { committer : address; rejector : address }
 
 (* O(log2 levels) + O(log2 submissions) *)
 let submit (submission : submission) (storage : storage) =
   let { levels; trusted; collateral_vault } = storage in
-  let Level_data.{ submissions; commits; committers } =
+  let Level_data.{ submissions; committers } =
     match Big_map.find_opt current_level levels with
     | Some level_data -> level_data
     | None -> Level_data.empty ()
   in
   let submissions = Submission_lazy_map.append submission submissions in
-  let level_data = Level_data.{ submissions; commits; committers } in
+  let level_data = Level_data.{ submissions; committers } in
   let levels = Big_map.add current_level level_data levels in
   { levels; trusted; collateral_vault }
 
@@ -457,10 +506,6 @@ let exit (storage : storage) =
   in
   let transaction = Tezos.transaction () stake_amount contract in
   ([ transaction ], { levels; trusted; collateral_vault })
-
-let round_time = 10n
-
-let time_to_respond = 1n * round_time
 
 (* TODO: is it okay to accept commit(102) without having commit(101)?
     I think so, just the effects need to be ordered *)
@@ -496,32 +541,30 @@ let commit (level : level) (new_state_hash : state_hash) (steps : step)
   let () = assert (Collateral_vault.has_stake sender collateral_vault) in
   let () = assert (is_open_level level) in
 
-  let Level_data.{ submissions; commits; committers } =
+  let Level_data.{ submissions; committers } =
     match Big_map.find_opt level levels with
     | Some level_data -> level_data
     | None -> Level_data.empty ()
   in
 
+  let commit = Commit.make new_state_hash steps in
   let committers =
-    match Committers_lazy_set.append sender committers with
+    match Committer_lazy_map.append sender commit committers with
     | Some committers -> committers
     | None -> failwith "duplicated committer"
   in
-  let commits =
-    match Commit_lazy_map.append new_state_hash commits with
-    | Some commits -> commits
-    | None -> failwith "duplicated commit"
-  in
 
-  let level_data = Level_data.{ submissions; commits; committers } in
+  let level_data = Level_data.{ submissions; committers } in
   let levels = Big_map.add level level_data levels in
   { levels; trusted; collateral_vault }
 
 let start_rejection_game (new_rejection_game : new_rejection_game)
     (storage : storage) =
+  (* TODO: prevent duplicated rejection game, if it matters *)
+  let rejector = sender in
   let {
     level;
-    committer_state_hash;
+    committer;
     rejector_mid_state_hash;
     rejector_state_hash;
     rejector_steps;
@@ -530,28 +573,50 @@ let start_rejection_game (new_rejection_game : new_rejection_game)
   in
   let { levels; trusted; collateral_vault } = storage in
 
-  let () = assert (Collateral_vault.has_stake sender collateral_vault) in
+  let () = assert (Collateral_vault.has_stake rejector collateral_vault) in
+  (* TODO: not finalized is not the right way to say it *)
   let () = assert (not (is_finalized_level level storage)) in
 
-  let Level_data.{ submissions = _; commits; committers = _ } =
+  let Level_data.{ submissions; committers } =
     match Big_map.find_opt level levels with
     | Some level_data -> level_data
     | None -> Level_data.empty ()
   in
 
-  let { sender = _; steps = committer_steps; rejections } =
-    match Commit_lazy_map.find_opt committer_state_hash commits with
-    | Some commit_data -> commit_data
-    | None -> failwith "invalid committer state hash"
+  let commit =
+    match Committer_lazy_map.find_opt committer committers with
+    | Some commit -> commit
+    | None ->
+        (* TODO: should this be a slash??? *)
+        failwith "invalid committer state hash"
   in
+  let committer_state_hash = Commit.state_hash commit in
+  let committer_steps = Commit.steps commit in
 
   let trusted_state_hash, _trusted_level = trusted in
-  let rejection_game =
-    Rejection_game.start ~previous_state_hash:trusted_state_hash
+  let game =
+    Large_rejection_game.start ~previous_state_hash:trusted_state_hash
       ~committer_state_hash ~committer_steps ~rejector_state_hash
       ~rejector_steps ~rejector_mid_state_hash
   in
-  ()
+
+  let commit =
+    match Commit.append_rejection ~rejector game commit with
+    | Some commit -> commit
+    | None -> failwith "duplicated rejectin game"
+  in
+
+  (* TODO: abstract this in Committer_lazy_map *)
+  let committers =
+    match Committer_lazy_map.update committer commit committers with
+    | Some committer -> committer
+    | None -> failwith "unreachablçe"
+  in
+  let levels =
+    Big_map.add level Level_data.{ submissions; committers } levels
+  in
+
+  { levels; trusted; collateral_vault }
 
 (* let trust_commit (level : level) (state_hash : state_hash) (storage : storage) =
    let { levels; trusted_level; collateral_vault } = storage in
