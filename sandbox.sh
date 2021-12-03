@@ -30,7 +30,7 @@ message() {
 create_new_rollup () {
   message "Deploying new rollup contract"
 
-  storage="{ current_level = 0n; state = ([]: bytes list) }"
+  storage="unit"
   rollup_contract="./tezos_interop/rollup.mligo"
   storage=$(ligo compile storage "$rollup_contract" "$storage")
   contract=$(ligo compile contract $rollup_contract)

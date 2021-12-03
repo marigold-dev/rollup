@@ -7,7 +7,7 @@
   (file ./run_entrypoint.bundle.js)
   (file ./fetch_storage.bundle.js)
   (file ./listen_transactions.bundle.js)
-  (file ./listen_blocks.js)))
+  (file ./listen_blocks.bundle.js)))
 
 (rule
  (deps

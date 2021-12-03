@@ -11,6 +11,6 @@ module type Rw = sig
   val write : t -> file:string -> unit Lwt.t
 end
 
-module Interop_context : Rw with type t := Context.t
+module Interop_context : Rw with type t := Interop_context.t
 
 module State_bin : Rw with type t := State.t

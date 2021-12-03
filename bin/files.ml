@@ -1,4 +1,6 @@
 open Helpers
+open Tezos
+open Tezos_interop
 
 exception Invalid_json of string
 
@@ -37,10 +39,10 @@ module Interop_context = struct
     let to_yojson t = `String (to_string t)
   end
 
-  type t = Tezos_interop.Context.t = {
+  type t = Interop_context.t = {
     rpc_node : Uri.t;
     secret : Secret.t;
-    consensus_contract : Tezos.Address.t;
+    consensus_contract : Address.t;
   }
   [@@deriving yojson]
 

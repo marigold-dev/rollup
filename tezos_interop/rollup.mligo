@@ -1,21 +1,21 @@
-type level = nat
-type storage = {current_level: level; state: bytes list}
-type submission = bytes
-type state_hash = bytes
+type vote = 
+ | Agree 
+ | Disagree
+type new_reject_game = {level: nat; commiter: address; r_m_h: bytes; r_s_h: bytes; steps: nat }
+type actions = 
+| Commit of {level: nat; state_hash: bytes; steps: nat}
+| Reject of {level: nat; commiter: address; r_m_h: bytes; r_s_h: bytes; steps: nat }
+| Fork_commit of {commiter: address}
+| Fork_game of {commiter: address; rejector: address}
+| Start_rejection_game of new_reject_game
+| Send_middle_hash of { committer : address; state_hash : bytes }
+| Vote_on_middle of { rejector : address; vote : vote }
+| Replay of { committer : address; state : bytes }
 
-type action =
-  | Submit of submission
-  | Join
-  | Commit of level * state_hash
-
-
+type storage = unit
 type return = operation list * storage
 
-let enact (store, delta : storage * bytes) : storage = 
-    {current_level = store.current_level + 1n; state = delta :: store.state}
-let main (action, store : action * storage) : return =
- ([] : operation list), 
- (match action with
-   Submit (byt) -> enact(store, byt)
- | Commit (_, byt) -> enact(store, byt)
- | _         -> store)
+let main (action, storage: actions * storage): return = 
+ match action with 
+| Commit {level = _; state_hash = _; steps = _} -> ([]: operation list), storage
+| _ -> ([]: operation list), storage

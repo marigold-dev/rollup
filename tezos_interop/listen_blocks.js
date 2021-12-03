@@ -44,18 +44,24 @@ const blockstream = Tezos.stream.subscribe("head");
 blockstream.on("error", error);
 blockstream.on("data", async (content) => {
   /** @type {rpc.OperationContentsAndResultMetadataTransaction} */
-  const block_data = await Tezos.rpc.getBlock({block: content});
+  const block_data = await Tezos.rpc.getBlock({ block: content });
   try {
-    const operations =
-    block_data.operations
-    .flat()
-    .flatMap(x => {
-        return x.contents.map(y => ({...y, hash: x.hash}))
+    const operations = block_data.operations
+      .flat()
+      .flatMap((x) => {
+        return x.contents.map((y) => ({ ...y, hash: x.hash }));
       })
-    .filter(x => {
-      return x.destination === destination && x.kind === taquito.OpKind.TRANSACTION
-    })
-    .map(({parameters, hash}, index) => ({...parameters, index, hash, level: block_data.header.level}))
+      .filter((x) => {
+        return (
+          x.destination === destination && x.kind === taquito.OpKind.TRANSACTION
+        );
+      })
+      .map(({ parameters, hash }, index) => ({
+        ...parameters,
+        index,
+        hash,
+        level: block_data.header.level,
+      }));
     operations.forEach(output);
   } catch (err) {
     console.error(err);

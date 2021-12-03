@@ -1,21 +1,21 @@
 open Environment
 
-(* THE IMPORTANT THING IS WE'RE BURNING SOMEONE'S MONEY *)
+   (* THE IMPORTANT THING IS WE'RE BURNING SOMEONE'S MONEY *)
 
 (* IMPORTANT: the honest validator will never loose at anything *)
 (* anyone can defend a commit *)
 
-(* TODO: calculate worse scenarion, how much money honest needs *)
-(* TODO: submit hash only *)
-type submission = bytes
-type state_hash = bytes
-type rejection = { operation_id : int; proof : bytes }
+   (* TODO: calculate worse scenarion, how much money honest needs *)
+   (* TODO: submit hash only *)
+   type submission = bytes
+   type state_hash = bytes
+   type rejection = { operation_id : int; proof : bytes }
 
-(* TODO: BIG TODO: go over all asserts and slash whoever is needed *)
+   (* TODO: BIG TODO: go over all asserts and slash whoever is needed *)
 
-(* TODO: put all required money to be a honest validator on the contract before starting rejections or commits *)
+   (* TODO: put all required money to be a honest validator on the contract before starting rejections or commits *)
 
-(* TODO: commits are allowed to also clean a level to avoid paying for increasing the storage *)
+   (* TODO: commits are allowed to also clean a level to avoid paying for increasing the storage *)
 
 (* TODO: batch parameter to be more efficient in gas*)
 type committer = address
@@ -340,8 +340,46 @@ let main ((action, storage) : parameter * storage) =
       let storage =
         reject ~level ~committer ~defend_as ~mid_state_hash ~storage
       in
-      (([] : operation list), storage)
-  (* | Trust_commit (state_hash, level) ->
-      let storage = trust_commit state_hash level storage in
-      (([] : operation list), storage) *)
-  | _ -> assert false
+
+      let () = assert (Commit_lazy_map.length commits = 1n) in
+      let _commit =
+        match Commit_lazy_map.find_opt state_hash commits with
+        | Some commit -> commit
+        | None -> failwith "bullshit state hash"
+      in
+
+      (* TODO: think it again, about removing rejections or not *)
+      (* let () = assert (Rejection_lazy_map.length commit.rejections = 1n) in *)
+      let levels = Big_map.remove level levels in
+      { levels; trusted_level = level; collateral_vault } *)
+
+   let main ((action, storage) : parameter * storage) =
+     (* TODO: assert amount everywhere *)
+     match action with
+     | Submit submission ->
+         let storage = submit submission storage in
+         (([] : operation list), storage)
+     | Join ->
+         let storage = join storage in
+         (([] : operation list), storage)
+     | Exit -> exit storage
+     | Commit { level; state_hash; steps } ->
+         let storage = commit level state_hash steps storage in
+         (([] : operation list), storage)
+     | Reject
+         {
+           level;
+           committer;
+           rejector_mid_state_hash;
+           rejector_state_hash;
+           rejector_steps;
+         } ->
+         let storage =
+           reject ~level ~committer ~rejector_mid_state_hash ~rejector_state_hash
+             ~rejector_steps ~storage
+         in
+         (([] : operation list), storage)
+     (* | Trust_commit (state_hash, level) ->
+         let storage = trust_commit state_hash level storage in
+         (([] : operation list), storage) *)
+     | _ -> assert false *)

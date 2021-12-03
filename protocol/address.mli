@@ -5,7 +5,7 @@ type t
 val of_wallet : Key.t -> t
 val pubkey_matches_wallet : Crypto.Key.t -> t -> bool
 
-val compare: t -> t -> int
+val compare : t -> t -> int
 val make : unit -> Secret.t * t
 
 val to_key_hash : t -> Key_hash.t
