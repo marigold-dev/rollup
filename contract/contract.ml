@@ -1,5 +1,7 @@
 open Tezos_environment
 
+(* THE IMPORTANT THING IS WE'RE BURNING SOMEONE'S MONEY *)
+
 (* IMPORTANT: the honest validator will never loose at anything *)
 (* anyone can defend a commit *)
 let current_level = Tezos.level
@@ -22,8 +24,8 @@ type rejection = { operation_id : int; proof : bytes }
 (* TODO: commits are allowed to also clean a level to avoid paying for increasing the storage *)
 
 (* TODO: batch parameter to be more efficient in gas*)
-type rejection_game_id = nat
 type committer = address
+type rejector = address
 type new_rejection_game = {
   level : level;
   (* TODO: this needs to be a known state_hash on this level *)
@@ -133,6 +135,8 @@ module Small_rejection_game : sig
   val has_winner : state -> player option
 end = struct
   (* TODO: if we require commit to include steps we can skip a couple turns *)
+  (* TODO: if we require the committer to send the hash, we can fuse turns *)
+  (* TODO: remove committer if it looses as a rejector *)
   (* TODO: log2 of steps to know maximum of turns instead of holding each individual step, thank you Daniel*)
 
   type state =
@@ -305,35 +309,43 @@ end = struct
 end
 
 module Rejection_lazy_map : sig
-  type game_id
-
   type t
 
   val empty : unit -> t
 
   (* O(log n) *)
-  val append : rejector:address -> Large_rejection_game.state -> t -> t option
-
-  val fork : unit
+  val append : rejector:rejector -> Large_rejection_game.state -> t -> t option
 
   (* O(log n) *)
-  val find_opt : t -> rejection_game option
+  val remove : rejector:rejector -> t -> t option
+
+  (* O(log n) *)
+  val find_opt : rejector:rejector -> t -> Large_rejection_game.state option
 end = struct
-  type t = { length : nat; items : (address, Rejection_game.state) big_map }
+  type t = {
+    length : nat;
+    items : (rejector, Large_rejection_game.state) big_map;
+  }
 
   let empty () = { length = 0n; items = Big_map.empty }
 
-  let append game t =
-    if Big_map.mem sender t.items then None
+  let append ~rejector game t =
+    if Big_map.mem rejector t.items then None
     else
       let length = t.length + 1n in
-      let items = Big_map.add sender game t.items in
+      let items = Big_map.add rejector game t.items in
       Some { length; items }
 
-  let find_opt t = Big_map.find_opt sender t.items
-end
+  let remove ~rejector t =
+    (* TODO: assert properties required to remove a rejection game *)
+    if Big_map.mem rejector t.items then
+      let length = abs (t.length - 1n) in
+      let items = Big_map.remove rejector t.items in
+      Some { length; items }
+    else None
 
-(* THE IMPORTANT THING IS WE'RE BURNING SOMEONE'S MONEY *)
+  let find_opt ~rejector t = Big_map.find_opt rejector t.items
+end
 
 module Commit : sig
   type t
@@ -360,6 +372,7 @@ end = struct
 
   let state_hash t = t.state_hash
   let steps t = t.steps
+  let rejections t = t.steps
 
   let append_rejection ~rejector rejection t =
     let { state_hash; steps; rejections } = t in
@@ -378,8 +391,15 @@ module Committer_lazy_map : sig
   val append : committer -> Commit.t -> t -> t option
 
   (* O(log n) *)
-  (* [update committer commit t] None when missing update *)
+  (* [update committer commit t] None when missing *)
   val update : committer -> Commit.t -> t -> t option
+
+  (* O(log n) *)
+  (* [remove committer t] None when missing *)
+  val remove : committer -> t -> t option
+
+  (* O(log n) *)
+  val fork : from:committer -> committer -> t -> t
 
   (* O(log n) *)
   val find_opt : committer -> t -> Commit.t option
@@ -404,6 +424,13 @@ end = struct
     if Big_map.mem committer t.items then
       let items = Big_map.add committer commit t.items in
       Some { length = t.length; items }
+    else None
+  let remove committer t =
+    (* TODO: this is unneeded but hmm *)
+    if Big_map.mem committer t.items then
+      let length = abs (t.length - 1n) in
+      let items = Big_map.remove committer t.items in
+      Some { length; items }
     else None
   let find_opt state_hash t = Big_map.find_opt state_hash t.items
   let mem state_hash t = Big_map.mem state_hash t.items
@@ -452,6 +479,7 @@ end
 module Black_list_lazy_map = struct
   type t
 end
+
 type storage = {
   levels : (level, Level_data.t) big_map;
   trusted : state_hash * level;
@@ -463,14 +491,22 @@ type parameter =
   (* validators *)
   | Join
   | Exit
-  | Commit of level * state_hash * step
+  | Commit of { level : level; state_hash : state_hash; steps : step }
+  | Reject of {
+      level : level;
+      committer : committer;
+      rejector_mid_state_hash : state_hash;
+      rejector_state_hash : state_hash;
+      rejector_steps : step;
+    }
+  | Fork_commit of { committer : committer }
+  | Fork_game of { committer : address; rejector : address }
   (* | Trust_commit of level * state_hash *)
+  (* TODO? fuse commit *)
   | Start_rejection_game of new_rejection_game
   | Send_middle_hash of { committer : address; state_hash : state_hash }
   | Vote_on_middle of { rejector : address; vote : Small_rejection_game.vote }
   | Replay of { committer : address; state : VM.t }
-  | Fork_commit of { committer : address }
-  | Fork_game of { committer : address; rejector : address }
 
 (* O(log2 levels) + O(log2 submissions) *)
 let submit (submission : submission) (storage : storage) =
@@ -558,19 +594,10 @@ let commit (level : level) (new_state_hash : state_hash) (steps : step)
   let levels = Big_map.add level level_data levels in
   { levels; trusted; collateral_vault }
 
-let start_rejection_game (new_rejection_game : new_rejection_game)
-    (storage : storage) =
+let reject ~level ~committer ~rejector_mid_state_hash ~rejector_state_hash
+    ~rejector_steps ~storage =
   (* TODO: prevent duplicated rejection game, if it matters *)
   let rejector = sender in
-  let {
-    level;
-    committer;
-    rejector_mid_state_hash;
-    rejector_state_hash;
-    rejector_steps;
-  } =
-    new_rejection_game
-  in
   let { levels; trusted; collateral_vault } = storage in
 
   let () = assert (Collateral_vault.has_stake rejector collateral_vault) in
@@ -653,8 +680,21 @@ let main ((action, storage) : parameter * storage) =
       let storage = join storage in
       (([] : operation list), storage)
   | Exit -> exit storage
-  | Commit (level, state_hash, steps) ->
+  | Commit { level; state_hash; steps } ->
       let storage = commit level state_hash steps storage in
+      (([] : operation list), storage)
+  | Reject
+      {
+        level;
+        committer;
+        rejector_mid_state_hash;
+        rejector_state_hash;
+        rejector_steps;
+      } ->
+      let storage =
+        reject ~level ~committer ~rejector_mid_state_hash ~rejector_state_hash
+          ~rejector_steps ~storage
+      in
       (([] : operation list), storage)
   (* | Trust_commit (state_hash, level) ->
       let storage = trust_commit state_hash level storage in
