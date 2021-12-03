@@ -6,5 +6,8 @@ module Let_syntax: {
   let ok: 'a => result('a, 'b);
   let (let.ok): (result('a, 'b), 'a => result('c, 'b)) => result('c, 'b);
   let (let.assert): (('a, bool), unit => result('b, 'a)) => result('b, 'a);
+};
+module Syntax: {
   let ( let* ): (result('a, 'b), 'a => result('c, 'b)) => result('c, 'b);
+  let (let+): ('a => 'b, result('a, 'c)) => result('b, 'c);
 };

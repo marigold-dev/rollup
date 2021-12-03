@@ -9,3 +9,8 @@ module Let_syntax = {
   let (let.some) = Option.bind;
   let (let.default) = (v, f) => Option.value(f(), ~default=v);
 };
+
+module Syntax = {
+  let ( let* ) = Option.bind;
+  let (let+) = Option.map;
+};

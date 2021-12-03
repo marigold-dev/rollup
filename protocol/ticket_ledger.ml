@@ -51,6 +51,7 @@ let assert_available ~source ~(amount : Amount.t) =
 
 let transfer ~source ~destination amount ticket t =
   let open Amount in
+  let open Result.Syntax in
   let source_balance = balance source ticket t in
   let* () = assert_available ~source:source_balance ~amount in
 
@@ -79,6 +80,7 @@ let deposit destination amount ticket t =
 
 let withdraw ~source ~destination amount ticket t =
   let open Amount in
+  let open Result.Syntax in
   let owner = destination in
   let source_balance = balance source ticket t in
   let* () = assert_available ~source:source_balance ~amount in

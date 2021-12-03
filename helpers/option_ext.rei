@@ -5,3 +5,7 @@ module Let_syntax: {
   let (let.some): (option('a), 'a => option('b)) => option('b);
   let (let.default): ('a, unit => option('a)) => 'a;
 };
+module Syntax: {
+  let ( let* ): (option('a), 'a => option('b)) => option('b);
+  let (let+): ('a => 'b, option('a)) => option('b);
+};
