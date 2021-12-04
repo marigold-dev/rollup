@@ -1,3 +1,4 @@
 (library
  (name node)
- (libraries tezos_interop contract))
+ (modules State_machine Effect Common State Vm)
+ (libraries tezos_interop contract crypto))
