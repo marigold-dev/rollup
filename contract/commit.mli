@@ -11,6 +11,9 @@ val state_hash : t -> state_hash
 (* O(1) *)
 val steps : t -> steps
 
+(* O(1) *)
+val rejections : t -> nat
+
 (* O(log n) *)
 (* [append_game ~rejector game commit] None when duplicated *)
 val append_game : rejector:rejector -> Rejection_game.t -> t -> t option
@@ -23,7 +26,7 @@ val remove_game : rejector:rejector -> t -> t option
 (* [find_game ~rejector game commit] None when missing *)
 val find_game : rejector:rejector -> t -> Rejection_game.t option
 
-type move_result = Committer_lost | Commit of t
+type move_result = Committer_won of t | Rejector_won | Commit of t
 
 (* [defend ~rejector move commit] None when missing *)
 val defend :

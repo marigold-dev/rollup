@@ -151,6 +151,8 @@ let start ~level ~previous_state_hash ~committer ~rejector ~mid_state_hash =
 let turns_per_round = 4n
 
 let current_turn state = Turn.current ~level:state.level
+let turn_kind state = Turn.turn_kind ~level:state.level
+
 let expected_player state =
   (* C -> W -> R -> W *)
   match current_turn state / turns_per_round with
@@ -189,7 +191,19 @@ let defend move state =
   | Timeout ->
       let () = assert_can_claim_timeout Committer state in
       Winner Committer
+
 let attack move state =
+  let current_turn = current_turn state in
+  let state =
+    if state.last_turn = current_turn then state
+    else
+      let () = assert (turn_kind state = Rejector) in
+      {
+        state with
+        last_turn = current_turn;
+        previous_state = Some state.current_state;
+      }
+  in
   match move with
   | Mid_hash hash -> Waiting (play Rejector (Send_hash hash) state)
   | Replay vm_state -> (

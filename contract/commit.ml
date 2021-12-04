@@ -7,6 +7,7 @@ type t = {
   steps : steps;
   (* duplicated *)
   level : level;
+  (* last_turn committer made a movement *)
   last_turn : Turn.t;
   (* state *)
   previous_rejections : Rejection_lazy_map.t option;
@@ -29,6 +30,7 @@ let make ~level state_hash ~steps =
 
 let state_hash t = t.state_hash
 let steps t = t.steps
+let rejections t = Rejection_lazy_map.length t.rejections
 
 let append_game ~rejector game t =
   match Rejection_lazy_map.append ~rejector game t.rejections with
@@ -47,15 +49,15 @@ let update_game ~rejector game t =
   | Some rejections -> Some { t with rejections }
   | None -> None
 
-type move_result = Committer_lost | Commit of t
+type move_result = Committer_won of t | Rejector_won | Commit of t
 
 let claim_winner ~rejector winner commit =
   match winner with
   | Committer -> (
       match remove_game ~rejector commit with
-      | Some commit -> Some (Commit commit)
+      | Some commit -> Some (Committer_won commit)
       | None -> None)
-  | Rejector -> Some Committer_lost
+  | Rejector -> Some Rejector_won
 let handle_move_result (move_result : Rejection_game.move_result) ~rejector t =
   match move_result with
   | Winner winner -> claim_winner ~rejector winner t
@@ -64,13 +66,6 @@ let handle_move_result (move_result : Rejection_game.move_result) ~rejector t =
       | Some t -> Some (Commit t)
       | None -> None)
 
-(*
-  last_turn != current_turn;
-  A;                         D; A*)
-(*
-   0 -> 1   -> 2 -> 3 -> 4
-   C -> F_C -> R -> W -> R
-*)
 let defend ~rejector move t =
   let current_turn = current_turn t in
   let t =
