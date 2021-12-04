@@ -1,5 +1,7 @@
 include Tezos_environment
 
+type player = Rejector | Committer
+
 type state_hash = bytes
 type level = nat
 type steps = nat
