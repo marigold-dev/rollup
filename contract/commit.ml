@@ -46,3 +46,5 @@ let fork t =
       let commit = update_rejections rejections commit in
       Some commit
   | None -> None
+
+let find_game = assert false

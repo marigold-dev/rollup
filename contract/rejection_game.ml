@@ -12,14 +12,7 @@ module Small_rejection_game : sig
     | Vote of vote
     | Replay of Vm.t
 
-  val start :
-    previous_state_hash:state_hash ->
-    committer:state_hash * steps ->
-    rejector:state_hash * steps ->
-    mid_state_hash:state_hash ->
-    state
   val play : player -> action -> state -> state
-  val has_winner : state -> player option
 end = struct
   (* TODO: if we require commit to include steps we can skip a couple turns *)
   (* TODO: if we require the committer to send the hash, we can fuse turns *)
@@ -131,14 +124,6 @@ module Large_rejection_game : sig
   open Small_rejection_game
 
   type state
-  val has_winner : state -> player option
-
-  val start :
-    previous_state_hash:state_hash ->
-    committer:state_hash * steps ->
-    rejector:state_hash * steps ->
-    mid_state_hash:state_hash ->
-    state
 
   val play : player -> action -> state -> state
   val timeout : player -> state -> state
@@ -153,8 +138,6 @@ end = struct
     previous_action : action;
     current_state : state;
   }
-
-  type nonrec action = Play of action | Claim_timeout | Fork of action
 
   let half_turns_per_round = 2n
   let turns_per_round = 4n
@@ -203,7 +186,7 @@ end = struct
      you can claim a timeout if you're the expected player and the last movement was made by you
   *)
   let fork player action state =
-    let { previous_state; previous_action; current_state = _ } = state in
+    let { previous_state; previous_action; current_state = _; _ } = state in
     let () =
       (* TODO: slash instead of fail *)
       match (state.previous_action, action) with
@@ -219,3 +202,8 @@ end = struct
 
   let claim_victory : state -> player option = assert false
 end
+
+let fork = assert false
+type turn_kind = Committer | Fork_committer | Rejector | Fork_rejector
+let turn_kind = assert false
+let start = assert false

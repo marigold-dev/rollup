@@ -1,21 +1,21 @@
 open Environment
 
-   (* THE IMPORTANT THING IS WE'RE BURNING SOMEONE'S MONEY *)
+(* THE IMPORTANT THING IS WE'RE BURNING SOMEONE'S MONEY *)
 
 (* IMPORTANT: the honest validator will never loose at anything *)
 (* anyone can defend a commit *)
 
-   (* TODO: calculate worse scenarion, how much money honest needs *)
-   (* TODO: submit hash only *)
-   type submission = bytes
-   type state_hash = bytes
-   type rejection = { operation_id : int; proof : bytes }
+(* TODO: calculate worse scenarion, how much money honest needs *)
+(* TODO: submit hash only *)
+type submission = bytes
+type state_hash = bytes
+type rejection = { operation_id : int; proof : bytes }
 
-   (* TODO: BIG TODO: go over all asserts and slash whoever is needed *)
+(* TODO: BIG TODO: go over all asserts and slash whoever is needed *)
 
-   (* TODO: put all required money to be a honest validator on the contract before starting rejections or commits *)
+(* TODO: put all required money to be a honest validator on the contract before starting rejections or commits *)
 
-   (* TODO: commits are allowed to also clean a level to avoid paying for increasing the storage *)
+(* TODO: commits are allowed to also clean a level to avoid paying for increasing the storage *)
 
 (* TODO: batch parameter to be more efficient in gas*)
 type committer = address
@@ -68,6 +68,9 @@ type storage = {
   trusted : state_hash * level;
   collateral_vault : Collateral_vault.t; (* TODO: alive : bool; *)
 }
+
+type new_rejection_game
+
 type parameter =
   (* users *)
   | Submit of submission
@@ -87,8 +90,8 @@ type parameter =
   (* TODO? fuse commit *)
   | Start_rejection_game of new_rejection_game
   | Send_middle_hash of { committer : address; state_hash : state_hash }
-  | Vote_on_middle of { rejector : address; vote : Small_rejection_game.vote }
-  | Replay of { committer : address; state : VM.t }
+  | Vote_on_middle of { rejector : address; vote : unit }
+  | Replay of { committer : address; state : Vm.t }
 
 (* O(1) *)
 let submit (_ : submission) (storage : storage) = storage
@@ -179,11 +182,7 @@ let fork_commit ~level ~base_committer storage =
     | None -> Committer_lazy_map.empty ()
   in
 
-  let base_commit =
-    match Committer_lazy_map.find_opt base_committer committers with
-    | Some commit -> commit
-    | None -> failwith "this committer has no commit"
-  in
+  let base_commit = assert false in
   let commit =
     match Commit.fork base_commit with
     | Some commit -> commit
@@ -223,13 +222,7 @@ let reject ~level ~committer ~defend_as ~mid_state_hash ~storage =
   in
 
   let trusted_state_hash, _trusted_level = trusted in
-  let game =
-    Rejection_game.start ~previous_state_hash:trusted_state_hash
-      ~committer:
-        (Commit.state_hash committer_commit, Commit.steps committer_commit)
-      ~rejector:(Commit.state_hash rejector_commit, Commit.steps rejector_commit)
-      ~mid_state_hash
-  in
+  let game = assert false in
 
   let committer_commit =
     match Commit.append_game ~rejector:new_rejector game committer_commit with
@@ -274,29 +267,8 @@ let fork_reject ~level ~committer ~base_rejector storage =
   in
 
   let trusted_state_hash, _trusted_level = trusted in
-  let game =
-    Rejection_game.start ~previous_state_hash:trusted_state_hash
-      ~committer:
-        (Commit.state_hash committer_commit, Commit.steps committer_commit)
-      ~rejector:(Commit.state_hash rejector_commit, Commit.steps rejector_commit)
-      ~mid_state_hash
-  in
-
-  let committer_commit =
-    match Commit.append_game ~rejector game committer_commit with
-    | Some commit -> commit
-    | None -> failwith "duplicated rejectin game"
-  in
-
-  (* TODO: abstract this in Committer_lazy_map *)
-  let committers =
-    match Committer_lazy_map.update committer committer_commit committers with
-    | Some committer -> committer
-    | None -> failwith "unreachablçe"
-  in
-  let levels = Big_map.add level committers levels in
-
-  { levels; trusted; collateral_vault }
+  let game = assert false in
+  assert false
 
 (* let trust_commit (level : level) (state_hash : state_hash) (storage : storage) =
    let { levels; trusted_level; collateral_vault } = storage in
@@ -340,46 +312,25 @@ let main ((action, storage) : parameter * storage) =
       let storage =
         reject ~level ~committer ~defend_as ~mid_state_hash ~storage
       in
+      assert false
+  | _ -> assert false
 
-      let () = assert (Commit_lazy_map.length commits = 1n) in
-      let _commit =
-        match Commit_lazy_map.find_opt state_hash commits with
-        | Some commit -> commit
-        | None -> failwith "bullshit state hash"
-      in
-
-      (* TODO: think it again, about removing rejections or not *)
-      (* let () = assert (Rejection_lazy_map.length commit.rejections = 1n) in *)
-      let levels = Big_map.remove level levels in
-      { levels; trusted_level = level; collateral_vault } *)
-
-   let main ((action, storage) : parameter * storage) =
-     (* TODO: assert amount everywhere *)
-     match action with
-     | Submit submission ->
-         let storage = submit submission storage in
-         (([] : operation list), storage)
-     | Join ->
-         let storage = join storage in
-         (([] : operation list), storage)
-     | Exit -> exit storage
-     | Commit { level; state_hash; steps } ->
-         let storage = commit level state_hash steps storage in
-         (([] : operation list), storage)
-     | Reject
-         {
-           level;
-           committer;
-           rejector_mid_state_hash;
-           rejector_state_hash;
-           rejector_steps;
-         } ->
-         let storage =
-           reject ~level ~committer ~rejector_mid_state_hash ~rejector_state_hash
-             ~rejector_steps ~storage
-         in
-         (([] : operation list), storage)
-     (* | Trust_commit (state_hash, level) ->
-         let storage = trust_commit state_hash level storage in
-         (([] : operation list), storage) *)
-     | _ -> assert false *)
+let main ((action, storage) : parameter * storage) =
+  (* TODO: assert amount everywhere *)
+  match action with
+  | Submit submission ->
+      let storage = submit submission storage in
+      (([] : operation list), storage)
+  | Join ->
+      let storage = join storage in
+      (([] : operation list), storage)
+  | Exit -> exit storage
+  | Commit { level; state_hash; steps } ->
+      let storage = commit level state_hash steps storage in
+      (([] : operation list), storage)
+  | Reject { level; committer; _ } ->
+    assert false
+  (* | Trust_commit (state_hash, level) ->
+      let storage = trust_commit state_hash level storage in
+      (([] : operation list), storage) *)
+  | _ -> assert false
