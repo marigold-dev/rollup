@@ -186,7 +186,7 @@ module State_machine_test = struct
     let initial_level = 0 in
     let initial_state = 0 in
     let state = Level_data.initial initial_level initial_state in
-    let block = { level = 1; submissions = [ 1 ]; commits = [] } in
+    let block = { level = 1; submissions = [ [1] ]; commits = [] } in
     let (state, effects) = transition state block in 
     assert false
 
