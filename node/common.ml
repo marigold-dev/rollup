@@ -5,7 +5,7 @@ type author = string
 type step = int
 type step_count = int
 type commit =Commit of {
-  level: level;
+  commit_level: level;
   author: author;
   hash: hash;
   step_count: step_count

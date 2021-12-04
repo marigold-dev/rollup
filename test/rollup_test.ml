@@ -2,6 +2,8 @@ open Node
 open Crypto
 open Common
 
+let empty_block level = { level; submissions = []; commits = [] }
+
 module Vm_tests = struct
   let test_run_submissions_no_limit () =
     let submissions = [ [ 1 ]; [ 2; 3 ]; [ 4; 5; 6 ] ] in
@@ -67,7 +69,7 @@ module Level_data_tests = struct
     ()
 
   let assert_endorsed_comit ~level_data ~level ~expected_commit =
-    let commit = find_endorsed_commit_opt level level_data in
+    let commit = find_endorsed_commit level level_data in
     assert (commit = expected_commit)
 
   let test_initial () =
@@ -83,14 +85,12 @@ module Level_data_tests = struct
     let expected_commit =
       Commit
         {
-          level = 5;
+          commit_level = 5;
           author = "Bob Ross";
           hash = Vm.hash_state initial_state;
           step_count = 0;
         }
     in
-    print_endline @@ "Expected hash: "
-    ^ BLAKE2B.to_string (Vm.hash_state initial_state);
     let block =
       {
         level = initial_level + 1;
@@ -103,13 +103,12 @@ module Level_data_tests = struct
     let expected_state = initial_state + 6 in
     assert_level_data ~level_data ~level:block.level ~expected_state
       ~expected_steps:3 ~expected_submissions;
-    assert_endorsed_comit ~level_data ~level:(block.level - 1)
-      ~expected_commit:(Some expected_commit);
+    assert_endorsed_comit ~level_data ~level:(block.level - 1) ~expected_commit;
     let level = block.level + 1 in
     let expected_commit =
       Commit
         {
-          level = 6;
+          commit_level = 6;
           author = "Bob Ross";
           hash = Vm.hash_state expected_state;
           step_count = 0;
@@ -120,8 +119,7 @@ module Level_data_tests = struct
     let { vm_state; _ } = find_trusted_data_for_level level level_data in
     assert_level_data ~level_data ~level ~expected_state:vm_state
       ~expected_steps:0 ~expected_submissions:[];
-    assert_endorsed_comit ~level_data ~level:(block.level - 1)
-      ~expected_commit:(Some expected_commit)
+    assert_endorsed_comit ~level_data ~level:(block.level - 1) ~expected_commit
 
   let tests =
     let open Alcotest in
@@ -135,32 +133,68 @@ end
 module State_machine_test = struct
   open State_machine
 
-  let test_find_new_pending_rejection_games () =
+  let test_make_rejection_games () =
+    let initial_level = 5 in
     let initial_state = 21 in
-    let level_data = Level_data.initial 5 0 in
-    let commits = [] in
-    assert ([] = find_new_pending_rejection_games commits level_data);
-    let commits =
+    let level_data = Level_data.initial initial_level initial_state in
+
+    let good_commit =
+      Commit
+        {
+          commit_level = 5;
+          author = "Bob Ross";
+          hash = Vm.hash_state initial_state;
+          step_count = 0;
+        }
+    in
+    let bad_commit_level = 5 in
+    let bad_commit_author = "Evil Bob Ross" in
+    let bad_commit : commit =
+      Commit
+        {
+          commit_level = bad_commit_level;
+          author = bad_commit_author;
+          hash = BLAKE2B.hash "take all your money";
+          step_count = 0;
+        }
+    in
+    let commits = [ good_commit; bad_commit ] in
+    let block = { level = initial_level + 1; submissions = []; commits } in
+    let level_data = Level_data.add_level_data block level_data in
+    let games = make_new_rejection_games commits level_data in
+    let expected_rejection_games =
       [
-        Commit
+        Effect.Open_rejection_game
           {
-            level = 5;
-            author = "Bob Ross";
-            hash = Vm.hash_state initial_state;
-            step_count = 0;
+            level = bad_commit_level;
+            accused_author = bad_commit_author;
+            midpoint_hash = Vm.hash_state initial_state;
+            endorsed_commit = good_commit;
           };
       ]
     in
-    
+    assert (games = expected_rejection_games);
     ()
+
+  let test_scenario () =
+    (* Scenario:
+       - block 1, submit 1
+         -> Send_commit
+       - block 2, commit good hash, commit bad hash submit 2
+         -> Send_commit, Open_rejection_game
+    *)
+    let initial_level = 0 in
+    let initial_state = 0 in
+    let state = Level_data.initial initial_level initial_state in
+    let block = { level = 1; submissions = [ 1 ]; commits = [] } in
+    let (state, effects) = transition state block in 
+    assert false
 
   let tests =
     let open Alcotest in
     ( "State_machine",
-      [
-        test_case "test find_new_pending_rejection_games" `Quick
-          test_find_new_pending_rejection_games;
-      ] )
+      [ test_case "test make_rejection_games" `Quick test_make_rejection_games ]
+    )
 end
 
 let () =

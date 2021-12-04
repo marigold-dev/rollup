@@ -9,6 +9,10 @@ type pending_rejection_game =
       midpoint_hash : hash;
     }
 
+let self =
+  (* TODO: get this from config *)
+  "myself"
+
 module Level_data : sig
   type t
   type trusted_data = private {
@@ -20,7 +24,7 @@ module Level_data : sig
   val add_level_data : block_data -> t -> t
   val find_trusted_data_for_level : level -> t -> trusted_data
   val find_submissions_for_level : level -> t -> submission list
-  val find_endorsed_commit_opt : level -> t -> commit option
+  val find_endorsed_commit : level -> t -> commit
 end = struct
   module Level_map = Map.Make (Int)
   type trusted_data = { hash : hash; vm_state : Vm.t; step_count : step_count }
@@ -68,7 +72,7 @@ end = struct
       let commits =
         List.fold_left
           (fun commits (Commit commit) ->
-            Level_map.update commit.level
+            Level_map.update commit.commit_level
               (function
                 | Some commits -> Some (commits @ [ Commit commit ])
                 | None -> Some [ Commit commit ])
@@ -100,90 +104,69 @@ end = struct
   let find_submissions_for_level level { submissions; _ } =
     Level_map.find level submissions
 
-  let find_endorsed_commit_opt level level_data =
-    print_endline @@ "Level:  " ^ Int.to_string level;
-    print_endline @@ "Current height:  "
-    ^ Int.to_string level_data.current_block_height;
+  let find_endorsed_commit level level_data =
     let { hash = trusted_hash; _ } =
       find_trusted_data_for_level level level_data
     in
-    print_endline @@ "Trusted hash:  " ^ Crypto.BLAKE2B.to_string trusted_hash;
-    Level_map.find_opt level level_data.commits >>= fun level_commits ->
-    List.find_opt
-      (fun (Commit { hash; _ }) -> hash = trusted_hash)
-      level_commits
+    let level_commits = Level_map.find level level_data.commits in
+    let my_commit =
+      List.find_opt (fun (Commit { author; _ }) -> author = self) level_commits
+    in
+    match my_commit with
+    | Some my_commit -> my_commit
+    | None ->
+        List.find
+          (fun (Commit { hash; _ }) -> hash = trusted_hash)
+          level_commits
 end
 
-(** For a given batch of new commits, find all the
-    commits that we disagree with. We may or may not
-    open rejection games on them yet, depending on if
-    a commit we endorse has been successfully included in a
-    block yet. *)
-let find_new_pending_rejection_games commits level_data =
+let make_new_rejection_games commits level_data =
   List.fold_left
     (fun games
          (Commit
            {
-             level;
+             commit_level;
              author;
              hash = committed_hash;
              step_count = committed_step_count;
            }) ->
       let Level_data.{ hash; vm_state; step_count } =
-        Level_data.find_trusted_data_for_level level level_data
+        Level_data.find_trusted_data_for_level commit_level level_data
       in
       if hash = committed_hash && committed_step_count = step_count then games
       else
         let submissions =
-          Level_data.find_submissions_for_level level level_data
+          Level_data.find_submissions_for_level commit_level level_data
         in
         let midpoint = List.length submissions / 2 in
         let midpoint_hash =
           Vm.run_submissions ~until_step:midpoint submissions vm_state
           |> fst |> Vm.hash_state
         in
-        Pending_Rejection_game { level; midpoint_hash; accused_author = author }
+        let endorsed_commit =
+          Level_data.find_endorsed_commit commit_level level_data
+        in
+        Effect.Open_rejection_game
+          {
+            level = commit_level;
+            midpoint_hash;
+            accused_author = author;
+            endorsed_commit;
+          }
         :: games)
     [] commits
 
-(** Goes through all the pending rejection games and checks
-    to see if we have an endorsed commit we can refute the bad commit with.
-    If so, we construct a proper rejection game effect.
-    If not, we leave it in the pending rejection game list  *)
-let promote_games pending_rejection_games level_data =
-  List.fold_left
-    (fun (promote_game_effects, pending_rejection_games)
-         (Pending_Rejection_game { level; accused_author; midpoint_hash } as
-         game) ->
-      match Level_data.find_endorsed_commit_opt level level_data with
-      | Some endorsed_commit ->
-          let new_game_effect =
-            Effect.Open_rejection_game
-              { level; accused_author; midpoint_hash; endorsed_commit }
-          in
-          (new_game_effect :: promote_game_effects, pending_rejection_games)
-      | None -> (promote_game_effects, game :: pending_rejection_games))
-    ([], []) pending_rejection_games
+type state = Level_data.t
 
-type state = {
-  level_data : Level_data.t;
-  pending_rejection_games : pending_rejection_game list;
-}
 let transition : state -> block_data -> state * Effect.t list =
- fun { level_data; pending_rejection_games } block ->
-  let level_data = Level_data.add_level_data block level_data in
+ fun state block ->
+  let state = Level_data.add_level_data block state in
   let Level_data.{ hash; vm_state = _; step_count } =
-    Level_data.find_trusted_data_for_level block.level level_data
+    Level_data.find_trusted_data_for_level block.level state
   in
   let commit_effect =
     Effect.Send_commit { level = block.level; hash; step_count }
   in
-  let pending_rejection_games =
-    find_new_pending_rejection_games block.commits level_data
-    @ pending_rejection_games
-  in
-  let promote_game_effects, pending_rejection_games =
-    promote_games pending_rejection_games level_data
-  in
-  let all_effects = commit_effect :: promote_game_effects in
-  ({ level_data; pending_rejection_games }, all_effects)
+  let rejection_game_effects = make_new_rejection_games block.commits state in
+  let all_effects = commit_effect :: rejection_game_effects in
+  (state, all_effects)
