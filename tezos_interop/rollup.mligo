@@ -6,7 +6,7 @@ type actions =
 | Commit of {level: nat; state_hash: bytes; steps: nat}
 | Reject of {level: nat; commiter: address; r_m_h: bytes; r_s_h: bytes; steps: nat }
 | Fork_commit of {commiter: address}
-| Fork_game of {commiter: address; rejector: address}
+| Fork_game of {commiter: address}
 | Start_rejection_game of new_reject_game
 | Send_middle_hash of { committer : address; state_hash : bytes }
 | Vote_on_middle of { rejector : address; vote : vote }
