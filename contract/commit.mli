@@ -3,7 +3,15 @@ open Environment
 type t
 
 (* O(1) *)
-val make : level:level -> state_hash -> steps:steps -> t
+val make :
+  level:level ->
+  parent_state_hash:state_hash ->
+  state_hash:state_hash ->
+  steps:steps ->
+  t
+
+(* O(1) *)
+val parent_state_hash : t -> state_hash
 
 (* O(1) *)
 val state_hash : t -> state_hash

@@ -2,6 +2,7 @@ open Environment
 
 type t = {
   (* constants *)
+  parent_state_hash : state_hash;
   state_hash : state_hash;
   (* TODO: validate steps is inside of the commit_hash *)
   steps : steps;
@@ -17,9 +18,10 @@ type t = {
 let current_turn t = Turn.current ~level:t.level
 let turn_kind t = Turn.turn_kind ~level:t.level
 
-let make ~level state_hash ~steps =
+let make ~level ~parent_state_hash ~state_hash ~steps =
   let current_turn = Turn.current ~level in
   {
+    parent_state_hash;
     state_hash;
     steps;
     level;
@@ -28,6 +30,7 @@ let make ~level state_hash ~steps =
     rejections = Rejection_lazy_map.empty ();
   }
 
+let parent_state_hash t = t.parent_state_hash
 let state_hash t = t.state_hash
 let steps t = t.steps
 let rejections t = Rejection_lazy_map.length t.rejections
@@ -92,6 +95,7 @@ let attack ~rejector move t =
 
 let fork t =
   let {
+    parent_state_hash;
     state_hash;
     steps;
     level;
@@ -106,6 +110,6 @@ let fork t =
 
   match previous_rejections with
   | Some rejections ->
-      let t = make ~level state_hash ~steps in
+      let t = make ~level ~parent_state_hash ~state_hash ~steps in
       Some { t with rejections }
   | None -> None

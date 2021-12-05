@@ -79,7 +79,12 @@ type parameter =
   (* validators *)
   | Join
   | Exit
-  | Commit of { level : level; state_hash : state_hash; steps : steps }
+  | Commit of {
+      level : level;
+      parent_state_hash : state_hash;
+      state_hash : state_hash;
+      steps : steps;
+    }
   | Fork_commit of { level : level; committer : committer }
   | Reject of {
       level : level;
@@ -164,7 +169,7 @@ let append_commit ~level commit committers storage =
   let levels = Big_map.add level committers levels in
   { levels; trusted; collateral_vault }
 
-let commit ~level new_state_hash ~steps storage =
+let commit ~level ~parent_state_hash ~state_hash ~steps storage =
   let { levels; trusted = _; collateral_vault } = storage in
   let () = assert (Collateral_vault.has_stake sender collateral_vault) in
   (* TODO: magic number *)
@@ -176,7 +181,7 @@ let commit ~level new_state_hash ~steps storage =
     | None -> Committer_lazy_map.empty ()
   in
 
-  let commit = Commit.make ~level new_state_hash ~steps in
+  let commit = Commit.make ~level ~parent_state_hash ~state_hash ~steps in
   append_commit ~level commit committers storage
 
 (* TODO: when can you fork? *)
@@ -233,9 +238,22 @@ let reject ~level ~committer ~defend_as ~mid_state_hash ~storage =
     | None -> failwith "invalid rejector committer"
   in
 
-  let trusted_state_hash, _trusted_level = trusted in
+  (* rejector agrees with parent_state_hash *)
+  let () =
+    assert (
+      Commit.parent_state_hash committer_commit
+      = Commit.parent_state_hash rejector_commit)
+  in
+
+  (* rejector disagrees with state_hash *)
+  let () =
+    assert (
+      Commit.state_hash committer_commit <> Commit.state_hash rejector_commit)
+  in
+
   let game =
-    Rejection_game.start ~level ~previous_state_hash:trusted_state_hash
+    Rejection_game.start ~level
+      ~previous_state_hash:(Commit.parent_state_hash committer_commit)
       ~committer:
         (Commit.state_hash committer_commit, Commit.steps committer_commit)
       ~rejector:(Commit.state_hash rejector_commit, Commit.steps rejector_commit)
@@ -394,7 +412,7 @@ let trust_commit ~level ~committer storage =
   (* TODO: is this needed *)
   let () = assert (Collateral_vault.has_stake sender collateral_vault) in
 
-  let _trusted_state_hash, trusted_level = trusted in
+  let trusted_state_hash, trusted_level = trusted in
   let () = assert (level = trusted_level + 1n) in
   let () = assert (Turn.current ~level >= 3n) in
 
@@ -412,6 +430,7 @@ let trust_commit ~level ~committer storage =
     | None -> failwith "invalid committer state hash"
   in
 
+  let () = assert (Commit.parent_state_hash commit = trusted_state_hash) in
   let () = assert (Commit.rejections commit = 0n) in
   let trusted = (Commit.state_hash commit, Commit.steps commit) in
   let levels = Big_map.remove level levels in
@@ -428,8 +447,10 @@ let main ((action, storage) : parameter * storage) =
       let storage = join storage in
       (([] : operation list), storage)
   | Exit -> exit storage
-  | Commit { level; state_hash; steps } ->
-      let storage = commit ~level state_hash ~steps storage in
+  | Commit { level; parent_state_hash; state_hash; steps } ->
+      let storage =
+        commit ~level ~parent_state_hash ~state_hash ~steps storage
+      in
       (([] : operation list), storage)
   | Fork_commit { level; committer } ->
       let storage = fork_commit ~level ~base_committer:committer storage in
