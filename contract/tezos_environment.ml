@@ -100,3 +100,9 @@ module Crypto : sig
 end = struct
   let blake2b = assert false
 end
+
+module List : sig
+  val fold_left : ('a * 'b -> 'a) -> 'a -> 'b list -> 'a
+end = struct
+  let fold_left = assert false
+end
