@@ -33,23 +33,14 @@ module Vm = struct
       let open Michelson_v1_primitives in
       let open Option.Syntax in
       fun lst ->
-        let go = function
-          | Micheline.Prim (_, D_Pair, [ Int (_, level); Bytes (_, hash) ], _)
-            ->
-              Some (level, hash)
-          | _ -> None
-        in
-        let* lst =
-          List.fold_right
-            (fun x acc ->
-              let* acc = acc and* x = go x in
-              Some (x :: acc))
-            lst (Some [])
-        in
-        lst
-        |> traverse_option (fun (level, hash) ->
-               let* hash = BLAKE2B.of_bytes hash in
-               Some (level, hash))
+        traverse_option
+          (function
+            | Micheline.Prim (_, D_Pair, [ Int (_, level); Bytes (_, hash) ], _)
+              ->
+                let* hash = BLAKE2B.of_bytes hash in
+                Some (level, hash)
+            | _ -> None)
+          lst
   end
 
   type t = { level : Z.t; steps : Z.t; counter : Z.t; pool : Pool.t }
@@ -106,7 +97,12 @@ end
 
 type t =
   | Submit of BLAKE2B.t (* done *)
-  | Commit of { level : Z.t; state_hash : BLAKE2B.t; step : Z.t } (* done *)
+  | Commit of {
+      level : Z.t;
+      parent_state_hash : BLAKE2B.t;
+      state_hash : BLAKE2B.t;
+      step : Z.t;
+    } (* done *)
   | Join (* done*)
   | Exit (*done *)
   | Reject of {
@@ -139,13 +135,14 @@ let of_micheline entrypoint micheline =
         ( _,
           Michelson_v1_primitives.D_Pair,
           [
-            Prim (_, D_Pair, [ Int (_, level); Bytes (_, state_hash) ], _);
-            Int (_, step);
+            Prim (_, D_Pair, [ Int (_, level); Bytes (_, parent_state_hash) ], _);
+            Prim (_, D_Pair, [ Bytes (_, state_hash); Int (_, step) ], _);
           ],
           _ ) ) ->
       (* @TODO: properly handle this *)
-      let* state_hash = BLAKE2B.of_bytes state_hash in
-      Some (Commit { level; state_hash; step })
+      let* state_hash = BLAKE2B.of_bytes state_hash
+      and* parent_state_hash = BLAKE2B.of_bytes parent_state_hash in
+      Some (Commit { level; state_hash; parent_state_hash; step })
   | "submit", Micheline.Bytes (_, submission) ->
       let* submission = BLAKE2B.of_bytes submission in
       Some (Submit submission)
@@ -156,8 +153,7 @@ let of_micheline entrypoint micheline =
           [ Micheline.String (_, commiter); String (_, rejector) ],
           _ ) ) ->
       let open Tezos.Address in
-      let* commiter = of_string commiter in
-      let* rejector = of_string rejector in
+      let* commiter = of_string commiter and* rejector = of_string rejector in
       Some (Fork_reject { commiter; rejector })
   | "join", _ -> Some Join
   | "exit", _ -> Some Exit
@@ -175,9 +171,9 @@ let of_micheline entrypoint micheline =
           ],
           _ ) ) ->
       let open Tezos.Address in
-      let* committer = of_string committer in
-      let* defend_as = of_string defend_as in
-      let* mid_state_hash =
+      let* committer = of_string committer
+      and* defend_as = of_string defend_as
+      and* mid_state_hash =
         BLAKE2B.of_string (Bytes.to_string mid_state_hash)
       in
       Some (Reject { level; committer; defend_as; mid_state_hash })
@@ -191,8 +187,8 @@ let of_micheline entrypoint micheline =
             prim;
           ],
           _ ) ) ->
-      let* move = Rejection_game.defend_of_micheline prim in
-      let* rejector = Address.of_string rejector in
+      let* move = Rejection_game.defend_of_micheline prim
+      and* rejector = Address.of_string rejector in
       Some (Defend { level; move; rejector })
   | ( "attack",
       Micheline.Prim
@@ -204,8 +200,8 @@ let of_micheline entrypoint micheline =
             prim;
           ],
           _ ) ) ->
-      let* move = Rejection_game.attack_of_micheline prim in
-      let* committer = Address.of_string commiter in
+      let* move = Rejection_game.attack_of_micheline prim
+      and* committer = Address.of_string commiter in
       Some (Attack { level; committer; move })
   | ( "trust_commit",
       Micheline.Prim
