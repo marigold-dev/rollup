@@ -72,8 +72,10 @@ module M = struct
         Lwt.catch
           (fun _ ->
             let* line = Lwt_io.read_line process#stdout in
-            Yojson.Safe.from_string line
-            |> Output.of_yojson |> Result.get_ok |> on_message;
+            let _ = on_message in
+            print_endline line;
+            (* Yojson.Safe.from_string line
+               |> Output.of_yojson |> Result.get_ok |> on_message; *)
             read_line_until_fails ())
           on_fail
       in

@@ -1,31 +1,114 @@
 open Helpers
 open Crypto
 open Tezos
-module Rejection_game = struct
-  type t = {
-    level : Z.t;
-    (* TODO: this needs to be a known state_hash on this level *)
-    committer : Address.t;
-    rejector_mid_state_hash : BLAKE2B.t;
-    rejector_state_hash : BLAKE2B.t;
-    rejector_steps : Z.t;
-  }
-end
 
 module Vote = struct
   type t = Agree | Disagree
+  let of_micheline =
+    let open Pack in
+    let open Tezos_micheline in
+    let open Michelson_v1_primitives in
+    function
+    | Micheline.Prim (_, D_Left, [ Prim (_, D_Unit, _, _) ], _) -> Some Agree
+    | Micheline.Prim (_, D_Right, [ Prim (_, D_Unit, _, _) ], _) ->
+        Some Disagree
+    | _ -> None
 end
+module Vm = struct
+  module Pool = struct
+    type t = (Z.t * BLAKE2B.t) list
+    let traverse_option f l =
+      let open Option.Syntax in
+      let rec aux f acc l =
+        match l with
+        | [] -> Option.some (List.rev acc)
+        | x :: tail ->
+            let* x' = f x in
+            aux f (x' :: acc) tail
+      in
+      aux f [] l
+    let of_micheline =
+      let open Pack in
+      let open Tezos_micheline in
+      let open Michelson_v1_primitives in
+      let open Option.Syntax in
+      fun lst ->
+        let go = function
+          | Micheline.Prim (_, D_Pair, [ Int (_, level); Bytes (_, hash) ], _)
+            ->
+              Some (level, hash)
+          | _ -> None
+        in
+        let* lst =
+          List.fold_right
+            (fun x acc ->
+              let* acc = acc and* x = go x in
+              Some (x :: acc))
+            lst (Some [])
+        in
+        lst
+        |> traverse_option (fun (level, hash) ->
+               let* hash = BLAKE2B.of_bytes hash in
+               Some (level, hash))
+  end
 
-module VM = struct
-  type t = bytes (* ???? *)
+  type t = { level : Z.t; steps : Z.t; counter : Z.t; pool : Pool.t }
+
+  let of_micheline =
+    let open Pack in
+    let open Tezos_micheline in
+    let open Michelson_v1_primitives in
+    let open Option.Syntax in
+    function
+    | Micheline.Prim
+        ( _,
+          Michelson_v1_primitives.D_Pair,
+          [
+            Prim (_, D_Pair, [ Int (_, level); Int (_, steps) ], _);
+            Prim (_, D_Pair, Int (_, counter) :: pool, _);
+          ],
+          _ ) ->
+        let* pool = Pool.of_micheline pool in
+        Some { level; steps; counter; pool }
+    | _ -> None
+end
+module Rejection_game = struct
+  type defend = Vote of Vote.t | Timeout
+  type attack = Mid_hash of BLAKE2B.t | Replay of Vm.t | Timeout
+
+  let defend_of_micheline =
+    let open Pack in
+    let open Tezos_micheline in
+    let open Michelson_v1_primitives in
+    function
+    | Micheline.Prim (_, D_Right, [ prim ], _) ->
+        let open Option.Syntax in
+        let* vote = Vote.of_micheline prim in
+        Some (Vote vote)
+    | Micheline.Prim (_, D_Left, [ Prim (_, D_Left, _, _) ], _) -> Some Timeout
+    | _ -> None
+  let attack_of_micheline =
+    let open Pack in
+    let open Tezos_micheline in
+    let open Michelson_v1_primitives in
+    let open Option.Syntax in
+    function
+    | Micheline.Prim (_, D_Left, [ Prim (_, D_Left, [ Bytes (_, hash) ], _) ], _)
+      ->
+        let* hash = BLAKE2B.of_bytes hash in
+        Some (Mid_hash hash)
+    | Micheline.Prim (_, D_Left, [ Prim (_, D_Right, [ prim ], _) ], _) ->
+        let* vm = Vm.of_micheline prim in
+        Some (Replay vm)
+    | Micheline.Prim (_, D_Right, [ Prim (_, D_Unit, _, _) ], _) -> Some Timeout
+    | _ -> None
 end
 
 type t =
-  | Submit of Bytes.t (* done *)
+  | Submit of BLAKE2B.t (* done *)
   | Commit of { level : Z.t; state_hash : BLAKE2B.t; step : Z.t } (* done *)
   | Join (* done*)
   | Exit (*done *)
-  | Fork_game of { commiter : Address.t; rejector : Address.t } (* done *)
   | Reject of {
       level : Z.t;
       committer : Address.t;
@@ -33,13 +116,18 @@ type t =
       defend_as : Address.t;
       mid_state_hash : BLAKE2B.t;
     } (*done *)
-  | Fork_commit of { committer : Address.t } (* done *)
-  (* TODO? fuse commit *)
-  | Start_rejection_game of Rejection_game.t (* done *)
-  | Send_middle_hash of { committer : Address.t; state_hash : BLAKE2B.t } (* done *)
-  | Vote_on_middle of { rejector : Address.t; vote : Vote.t } (* done *)
-  | Replay of { committer : BLAKE2B.t; state : VM.t }
-(* @TODO: Vm.t ??? *)
+  | Fork_reject of { commiter : Address.t; rejector : Address.t } (* done *)
+  | Defend of {
+      level : Z.t;
+      rejector : Address.t;
+      move : Rejection_game.defend;
+    } (* done *)
+  | Attack of {
+      level : Z.t;
+      committer : Address.t;
+      move : Rejection_game.attack;
+    }
+  | Trust_commit of { level : Z.t; committer : Address.t }
 
 let of_micheline entrypoint micheline =
   let open Pack in
@@ -56,10 +144,12 @@ let of_micheline entrypoint micheline =
           ],
           _ ) ) ->
       (* @TODO: properly handle this *)
-      let* state_hash = state_hash |> Bytes.to_string |> BLAKE2B.of_string in
+      let* state_hash = BLAKE2B.of_bytes state_hash in
       Some (Commit { level; state_hash; step })
-  | "submit", Micheline.Bytes (_, submission) -> Some (Submit submission)
-  | ( "fork_game",
+  | "submit", Micheline.Bytes (_, submission) ->
+      let* submission = BLAKE2B.of_bytes submission in
+      Some (Submit submission)
+  | ( "fork_reject",
       Micheline.Prim
         ( _,
           Michelson_v1_primitives.D_Pair,
@@ -68,7 +158,7 @@ let of_micheline entrypoint micheline =
       let open Tezos.Address in
       let* commiter = of_string commiter in
       let* rejector = of_string rejector in
-      Some (Fork_game { commiter; rejector })
+      Some (Fork_reject { commiter; rejector })
   | "join", _ -> Some Join
   | "exit", _ -> Some Exit
   | ( "reject",
@@ -91,69 +181,38 @@ let of_micheline entrypoint micheline =
         BLAKE2B.of_string (Bytes.to_string mid_state_hash)
       in
       Some (Reject { level; committer; defend_as; mid_state_hash })
-  | "fork_commit ", Micheline.String (_, committer) ->
-      let* committer = Address.of_string committer in
-      Some (Fork_commit { committer })
-  | ( "vote_on_middle",
-      Micheline.Prim
-        ( _,
-          Michelson_v1_primitives.D_Pair,
-          [ Micheline.String (_, rejector); String (_, vote) ],
-          _ ) ) ->
-      let vote =
-        match vote with
-        | "agree" -> Vote.Agree
-        | "disagree" -> Disagree
-        | _ -> assert false
-      in
-      let* rejector = Address.of_string rejector in
-      Some (Vote_on_middle { vote; rejector })
-  | ( "send_middle_hash",
-      Micheline.Prim
-        ( _,
-          Michelson_v1_primitives.D_Pair,
-          [ Micheline.String (_, committer); Bytes (_, state_hash) ],
-          _ ) ) ->
-      let* committer = Address.of_string committer in
-      let* state_hash = BLAKE2B.of_string (Bytes.to_string state_hash) in
-      Some (Send_middle_hash { committer; state_hash })
-  | ( "start_rejection_game",
+  | ( "defend",
       Micheline.Prim
         ( _,
           Michelson_v1_primitives.D_Pair,
           [
             Prim
-              ( _,
-                D_Pair,
-                [
-                  Prim (_, D_Pair, [ Int (_, level); String (_, committer) ], _);
-                  Prim
-                    ( _,
-                      D_Pair,
-                      [
-                        Bytes (_, rejector_mid_state_hash);
-                        Bytes (_, rejector_state_hash);
-                      ],
-                      _ );
-                ],
-                _ );
-            Int (_, rejector_steps);
+              (_, D_Pair, [ Micheline.Int (_, level); String (_, rejector) ], _);
+            prim;
           ],
           _ ) ) ->
+      let* move = Rejection_game.defend_of_micheline prim in
+      let* rejector = Address.of_string rejector in
+      Some (Defend { level; move; rejector })
+  | ( "attack",
+      Micheline.Prim
+        ( _,
+          Michelson_v1_primitives.D_Pair,
+          [
+            Prim
+              (_, D_Pair, [ Micheline.Int (_, level); String (_, commiter) ], _);
+            prim;
+          ],
+          _ ) ) ->
+      let* move = Rejection_game.attack_of_micheline prim in
+      let* committer = Address.of_string commiter in
+      Some (Attack { level; committer; move })
+  | ( "trust_commit",
+      Micheline.Prim
+        ( _,
+          Michelson_v1_primitives.D_Pair,
+          [ Micheline.Int (_, level); String (_, committer) ],
+          _ ) ) ->
       let* committer = Address.of_string committer in
-      let* rejector_mid_state_hash =
-        BLAKE2B.of_string (Bytes.to_string rejector_mid_state_hash)
-      in
-      let* rejector_state_hash =
-        BLAKE2B.of_string (Bytes.to_string rejector_state_hash)
-      in
-      Some
-        (Start_rejection_game
-           {
-             committer;
-             rejector_steps;
-             rejector_mid_state_hash;
-             rejector_state_hash;
-             level;
-           })
+      Some (Trust_commit { level; committer })
   | _ -> None
