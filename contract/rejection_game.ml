@@ -148,26 +148,15 @@ let start ~level ~previous_state_hash ~committer ~rejector ~mid_state_hash =
   let state = start ~previous_state_hash ~committer ~rejector ~mid_state_hash in
   make ~level state
 
-let turns_per_round = 4n
-
 let current_turn state = Turn.current ~level:state.level
 let turn_kind state = Turn.turn_kind ~level:state.level
 
-let expected_player state =
-  (* C -> W -> R -> W *)
-  match current_turn state / turns_per_round with
-  | Some (_, remainder) ->
-      if remainder = 0n then Some Committer
-      else if remainder = 2n then Some Rejector
-      else None
-  | None -> assert false
-
 let assert_is_expected_player player state =
   (* TODO: slash instead of fail *)
-  match expected_player state with
-  | Some expected_player when player = expected_player -> ()
-  | Some _ -> failwith "not your turn"
-  | None -> failwith "waiting period"
+  match (turn_kind state, player) with
+  | Committer, Committer -> ()
+  | Rejector, Rejector -> ()
+  | _ -> failwith "not your turn"
 
 (* timeout() -> remove_game | remove_commit *)
 
@@ -175,7 +164,7 @@ let assert_can_claim_timeout player state =
   let current_turn = current_turn state in
   (* TODO: duplicatead Turn.current *)
   let () = assert_is_expected_player player state in
-  assert (current_turn = state.last_turn + turns_per_round)
+  assert (current_turn = state.last_turn + Turn.turns_per_round)
 
 let play player action state =
   let { level; last_turn; previous_state = _; current_state } = state in
