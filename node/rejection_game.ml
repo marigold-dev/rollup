@@ -1,25 +1,8 @@
 open Environment
 
-type vote = Agree | Disagree
+type vote = Agree | Disagree [@@deriving show { with_path = false }]
 
-module Small_rejection_game : sig
-  type state
-
-  type action =
-    | Send_hash of state_hash
-    (* TODO: vote *)
-    | Vote of vote
-    | Replay of Vm.t
-
-  val start :
-    previous_state_hash:state_hash ->
-    committer:state_hash * steps ->
-    rejector:state_hash * steps ->
-    mid_state_hash:state_hash ->
-    state
-  val play : player -> action -> state -> state
-  val has_winner : state -> player option
-end = struct
+module Small_rejection_game = struct
   (* TODO: if we require commit to include steps we can skip a couple turns *)
   (* TODO: if we require the committer to send the hash, we can fuse turns *)
   (* TODO: remove committer if it looses as a rejector *)
@@ -35,8 +18,13 @@ end = struct
         initial : state_hash * steps;
         final : state_hash * steps * player;
       }
-    | To_replay of { state_hash : state_hash; expected : state_hash * player }
+    | To_replay of {
+        step : steps;
+        state_hash : state_hash;
+        expected : state_hash * player;
+      }
     | Winner of player
+  [@@deriving show { with_path = false }]
 
   type action = Send_hash of state_hash | Vote of vote | Replay of Vm.t
 
@@ -45,9 +33,7 @@ end = struct
 
   let calculate_mid_step ~initial_step ~final_step =
     let diff = abs (final_step - initial_step) in
-    match ediv diff 2n with
-    | Some (mid_step, _remainder) -> mid_step
-    | None -> assert false
+    diff / Z.of_int 2
 
   let start ~previous_state_hash ~committer ~rejector ~mid_state_hash =
     let committer_state_hash, committer_steps = committer in
@@ -57,14 +43,14 @@ end = struct
         (rejector_state_hash, rejector_steps, Rejector)
       else (committer_state_hash, committer_steps, Committer)
     in
-    let initial_step = 0n in
+    let initial_step = Z.zero in
     let initial = (previous_state_hash, initial_step) in
     let _final_hash, final_step, _final_player = final in
 
     (* WARNING: *)
     (* VM steps needs to be bigger than 2n*)
     (* TODO: slash instead of fail *)
-    let () = assert (final_step >= 2n) in
+    let () = assert (final_step >= Z.of_int 2) in
     let mid =
       let mid_step = calculate_mid_step ~initial_step ~final_step in
       (mid_state_hash, mid_step)
@@ -97,18 +83,23 @@ end = struct
 
         let initial_hash, initial_step = initial in
         let final_hash, final_step, expecting = final in
-        if initial_step + 1n = final_step then
+        if initial_step + Z.one = final_step then
           To_replay
-            { state_hash = initial_hash; expected = (final_hash, expecting) }
+            {
+              step = initial_step;
+              state_hash = initial_hash;
+              expected = (final_hash, expecting);
+            }
         else Waiting_midpoint { initial; final }
-    | To_replay { state_hash; expected }, Rejector, Replay state ->
+    | To_replay { step = _; state_hash; expected }, Rejector, Replay state ->
         (* TODO: slash instead of fail *)
         let () = assert (Vm.hash state = state_hash) in
         let state' = Vm.execute_step state in
 
         let expected_hash, expected_author = expected in
-        let opposite_player player =
-          match player with Rejector -> Committer | Committer -> Rejector
+        let opposite_player = function
+          | Rejector -> Committer
+          | Committer -> Rejector
         in
         let winner =
           if Vm.hash state' = expected_hash then expected_author
@@ -119,51 +110,79 @@ end = struct
     | _ ->
         (* TODO: slash instead of fail *)
         assert false
+
+  let rec execute_until_steps ~steps vm_state =
+    if steps >= Vm.steps vm_state then vm_state
+    else
+      let vm_state = Vm.execute_step vm_state in
+      execute_until_steps ~steps vm_state
 end
 
 open Small_rejection_game
-type nonrec state = {
+
+type defend = Vote of vote | Timeout [@@deriving show { with_path = false }]
+type attack = Mid_hash of state_hash | Replay of Vm.t | Timeout
+[@@deriving show { with_path = false }]
+
+type state = {
   (* duplicated *)
   level : level;
   last_turn : Turn.t;
   (* state *)
-  previous_state : state option;
-  current_state : state;
+  previous_state : Small_rejection_game.state option;
+  current_state : Small_rejection_game.state;
 }
-type t = state
+[@@deriving show { with_path = false }]
+type t = state [@@deriving show { with_path = false }]
 
-type defend = Vote of vote | Timeout
-type attack = Mid_hash of state_hash | Replay of Vm.t | Timeout
+let find_defend ~initial_vm_state t : defend =
+  match t.current_state with
+  | Vote_on_midpoint { initial = _; mid; final = _ } ->
+      let mid_hash, mid_step = mid in
+      let mid_state = execute_until_steps ~steps:mid_step initial_vm_state in
+      if Vm.hash mid_state = mid_hash then Vote Agree else Vote Disagree
+  | _ -> Timeout
+let find_mid_hash ~committer_steps ~rejector_steps ~initial_vm_state =
+  let final_steps =
+    if committer_steps > rejector_steps then rejector_steps else committer_steps
+  in
+  let mid_step =
+    calculate_mid_step ~initial_step:Z.zero ~final_step:final_steps
+  in
+  let mid_state = execute_until_steps ~steps:mid_step initial_vm_state in
+  Vm.hash mid_state
 
-let make ~level state =
-  let current_turn = Turn.current ~level in
+let find_attack ~initial_vm_state t : attack =
+  match t.current_state with
+  | Waiting_midpoint { initial; final } ->
+      let _initial_hash, initial_step = initial in
+      let _final_hash, final_step, _final_player = final in
+
+      let mid_step = calculate_mid_step ~initial_step ~final_step in
+      let mid_state = execute_until_steps ~steps:mid_step initial_vm_state in
+      Mid_hash (Vm.hash mid_state)
+  | To_replay { step; state_hash = _; expected = _ } ->
+      let state = execute_until_steps ~steps:step initial_vm_state in
+      let state = Vm.single_step_data state |> Option.get in
+      Replay state
+  | _ -> Timeout
+
+let make ~current_level ~level state =
+  let current_turn = Turn.current ~current_level ~level in
   {
     level;
     last_turn = current_turn;
     previous_state = None;
     current_state = state;
   }
-let start ~level ~previous_state_hash ~committer ~rejector ~mid_state_hash =
+
+let start ~current_level ~level ~previous_state_hash ~committer ~rejector
+    ~mid_state_hash =
   let state = start ~previous_state_hash ~committer ~rejector ~mid_state_hash in
-  make ~level state
+  make ~current_level ~level state
 
-let current_turn state = Turn.current ~level:state.level
-let turn_kind state = Turn.turn_kind ~level:state.level
-
-let assert_is_expected_player player state =
-  (* TODO: slash instead of fail *)
-  match (turn_kind state, player) with
-  | Committer, Committer -> ()
-  | Rejector, Rejector -> ()
-  | _ -> failwith "not your turn"
-
-(* timeout() -> remove_game | remove_commit *)
-
-let assert_can_claim_timeout player state =
-  let current_turn = current_turn state in
-  (* TODO: duplicatead Turn.current *)
-  let () = assert_is_expected_player player state in
-  assert (current_turn = state.last_turn + Turn.turns_per_round)
+let current_turn ~current_level state =
+  Turn.current ~current_level ~level:state.level
 
 let play player action state =
   let { level; last_turn; previous_state = _; current_state } = state in
@@ -176,16 +195,13 @@ type move_result = Winner of player | Waiting of state
 let defend move state =
   match move with
   | Vote vote -> Waiting (play Committer (Vote vote) state)
-  | Timeout ->
-      let () = assert_can_claim_timeout Committer state in
-      Winner Committer
+  | Timeout -> Winner Committer
 
-let attack move state =
-  let current_turn = current_turn state in
+let attack ~current_level move state =
+  let current_turn = current_turn ~current_level state in
   let state =
     if state.last_turn = current_turn then state
     else
-      let () = assert (turn_kind state = Rejector) in
       {
         state with
         last_turn = current_turn;
@@ -199,15 +215,12 @@ let attack move state =
       match has_winner state.current_state with
       | Some player -> Winner player
       | None -> assert false)
-  | Timeout ->
-      let () = assert_can_claim_timeout Rejector state in
-      Winner Rejector
+  | Timeout -> Winner Rejector
 
-let fork state =
+let fork ~current_level state =
   (* TODO: do we care about last_turn *)
   let { level; last_turn = _; previous_state; current_state = _ } = state in
-  let () = assert (Turn.turn_kind ~level = Fork_rejector) in
 
   match previous_state with
-  | Some state -> Some (make ~level state)
-  | None -> None
+  | Some state -> make ~current_level ~level state
+  | None -> assert false

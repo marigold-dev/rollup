@@ -6,7 +6,7 @@ let current ~level =
   (* TODO: this is not needed for the smart contract *)
   let () = assert (current_level > level) in
   let levels_since_level = abs (current_level - level) in
-  match levels_since_level / round_time with
+  match ediv levels_since_level round_time with
   | Some (turn, _remainder) -> turn
   | None -> assert false
 
@@ -16,7 +16,7 @@ let turns_per_round = 4n
 let turn_kind ~level =
   let current_turn = current ~level in
   (* C -> F_C -> R -> F_R *)
-  match current_turn / turns_per_round with
+  match ediv current_turn turns_per_round with
   | Some (_, remainder) ->
       if remainder = 0n then Committer
       else if remainder = 1n then Fork_committer

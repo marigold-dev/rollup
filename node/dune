@@ -1,3 +1,11 @@
-(library
+(executable
  (name node)
- (libraries tezos_interop contract))
+ (libraries zarith tezos_interop crypto)
+ (preprocess
+  (pps ppx_deriving.show)))
+
+(rule
+ (alias runtest)
+ (deps ./node.exe)
+ (action
+  (run ./node.exe)))

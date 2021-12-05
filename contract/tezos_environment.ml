@@ -28,7 +28,7 @@ let ( >= ) : nat -> nat -> bool = assert false
 
 let min : nat -> nat -> nat = assert false
 
-let ( / ) : nat -> nat -> (nat * nat) option = assert false
+let ediv : nat -> nat -> (nat * nat) option = assert false
 
 let abs : int -> nat = assert false
 
