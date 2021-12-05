@@ -78,6 +78,8 @@ let apply nats t =
   let level = level + 1n in
   let steps = 0n in
 
-  let nats = 0n :: 0n :: nats in
   let pool = List.fold_left (fun pool nat -> Pool.push nat pool) pool nats in
+  let pool = Pool.push 0n pool in
+  let pool = Pool.push 0n pool in
+
   { level; steps; counter; pool }
