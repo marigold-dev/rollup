@@ -7,5 +7,7 @@ module Let_syntax: {
 };
 module Syntax: {
   let ( let* ): (option('a), 'a => option('b)) => option('b);
+  let ( and* ): (option('a), option('b)) => option(('a, 'b));
   let (let+): ('a => 'b, option('a)) => option('b);
+  let (and+): (option('a), option('b)) => option(('a, 'b));
 };

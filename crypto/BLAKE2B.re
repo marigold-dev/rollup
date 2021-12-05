@@ -8,6 +8,7 @@ module Make =
          type t;
          let to_string: t => string;
          let of_string: string => option(t);
+         let of_bytes: bytes => option(t);
          // TODO: this is a leaky abstraction
          let of_raw_string: string => option(t);
          let to_raw_string: t => string;
@@ -31,11 +32,15 @@ module Make =
   });
 
   let of_raw_string = of_raw_string_opt;
+
   let to_string = to_hex;
   let of_string = string => {
     let.some () = String.length(string) == size * 2 ? Some() : None;
     of_hex_opt(string);
   };
+
+  let of_bytes = b => of_string(Bytes.to_string(b));
+
   let to_yojson = str => `String(to_hex(str));
   let of_yojson = json => {
     let.ok hex = [%of_yojson: string](json);
