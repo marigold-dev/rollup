@@ -45,7 +45,7 @@ module Tezos = struct
   let get_contract_opt : address -> 'parameter contract option = assert false
 end
 
-module rec Big_map : sig
+module Big_map : sig
   val empty : ('key, 'value) big_map
 
   val find_opt : 'key -> ('key, 'value) big_map -> 'value option
@@ -67,7 +67,7 @@ end = struct
   let mem = assert false
 end
 
-module rec Set : sig
+module Set : sig
   val add : 'el -> 'el set -> 'el set
 
   val empty : 'a set
@@ -83,4 +83,20 @@ end = struct
   let cardinal = assert false
 
   let fold = assert false
+end
+
+module Bytes : sig
+  type t = bytes
+  val pack : 'a -> t
+  val concat : bytes -> bytes -> bytes
+end = struct
+  type t = bytes
+  let pack = assert false
+  let concat = assert false
+end
+
+module Crypto : sig
+  val blake2b : bytes -> bytes
+end = struct
+  let blake2b = assert false
 end
