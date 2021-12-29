@@ -1,3 +1,12 @@
-(test
- (name rollup_test)
- (libraries alcotest node))
+(executable
+ (name test)
+ (libraries ligo_environment)
+ (preprocess
+  (pps ppx_ligo_interop)))
+
+(rule
+ (alias runtest)
+ (deps
+  (:exe ./test.exe))
+ (action
+  (run %{exe})))
