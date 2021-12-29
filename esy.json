@@ -3,9 +3,7 @@
   "esy": {
     "build": "dune build -p #{self.name}",
     "release": {
-      "bin": [
-        "rollup"
-      ]
+      "bin": ["rollup"]
     },
     "buildEnv": {
       "PATH": "%{localStore}%/../bin:$PATH"
@@ -14,6 +12,7 @@
   "license": "MIT",
   "scripts": {
     "test": "dune test",
+    "coverage": "dune runtest --instrument-with bisect_ppx --force",
     "format": "dune build @fmt --auto-promote"
   },
   "dependencies": {
@@ -44,6 +43,7 @@
     "@opam/ocamlformat": "*",
     "@opam/ocamlformat-rpc": "*",
     "@opam/ocaml-lsp-server": "*",
-    "@opam/alcotest": "*"
+    "@opam/alcotest": "*",
+    "@opam/bisect_ppx": "*"
   }
 }
