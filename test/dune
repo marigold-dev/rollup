@@ -2,7 +2,9 @@
  (name test)
  (libraries ligo_environment)
  (preprocess
-  (pps ppx_ligo_interop)))
+  (pps ppx_ligo_interop))
+ (instrumentation
+  (backend bisect_ppx)))
 
 (rule
  (alias runtest)
