@@ -26,8 +26,10 @@ let invalid_hash () = random_hash "invalid_"
 let steps () =
   let seed = Cstruct.to_bytes (Mirage_crypto_rng.generate 1) in
   (* TODO: try bigger numbers *)
-  let _int = Stdlib.Bytes.get_uint8 seed 0 in
-  nat 5
+  (* TODO: try entire range in a run, like, 0-32 *)
+  (* up to 32 *)
+  let int = Stdlib.Bytes.get_uint8 seed 0 lsr 3 in
+  nat int + nat 2
 let meaningless name = failwith ("meaningless " ^ name)
 
 (* framework *)
