@@ -14,4 +14,4 @@ type steps = nat
    let current_level = Tezos.level
    let sender = Tezos.sender *)
 
-let round_time = 10n
+let round_time = [%nat 10]

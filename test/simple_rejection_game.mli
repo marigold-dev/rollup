@@ -1,5 +1,7 @@
 open Environment
 
+(* TODO: ensure that only a single valid movement
+         can be done for each player at each stage *)
 (* TODO: can we abstract this types away while keeping the tests?*)
 type search_state = private {
   initial_step : steps;
