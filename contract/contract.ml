@@ -1,11 +1,16 @@
 open Environment
 
 (* THE IMPORTANT THING IS WE'RE BURNING SOMEONE'S MONEY *)
-(*
-Our game, is the simple game, but lazy
+(* Our game, is the simple game, but lazy *)
 
-
-*)
+(* IMPORTANT: every state of the VM must be unique *)
+(* IMPORTANT: step must be bigger or equal to 2 *)
+(* IMPORTANT: state_hash should always includes the steps and level *)
+(* IMPORTANT: every level must have at least 2 steps,
+              they may be noops that just bump the state hash *)
+(* IMPORTANT: if we require a single commit remaining per level,
+                then a third party needs to be allowed to remove commits
+                when the committer and rejector timeout *)
 
 (* IMPORTANT: the honest validator will never loose at anything *)
 (* anyone can defend a commit *)

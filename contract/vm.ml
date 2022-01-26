@@ -28,25 +28,41 @@ end = struct
   let empty () : t = []
 
   let hash (t : t) =
-    match t with [] -> empty_hash () | (_el, hash) :: _ -> hash
+    match t with
+    | [] -> empty_hash ()
+    | (_el, hash) :: _ -> hash
 
   let push (el : nat) (t : t) : t =
     let hash_of_t = hash t in
     let hash_of_el = Crypto.blake2b (Bytes.pack el) in
     let hash = Crypto.blake2b (Bytes.concat hash_of_el hash_of_t) in
     (el, hash) :: t
-  let pop (t : t) = match t with [] -> None | (el, _) :: tl -> Some (el, tl)
+  let pop (t : t) =
+    match t with
+    | [] -> None
+    | (el, _) :: tl -> Some (el, tl)
 
-  let is_empty (t : t) = match t with [] -> true | _ -> false
+  let is_empty (t : t) =
+    match t with
+    | [] -> true
+    | _ -> false
 
   let single_step_data (t : t) : t option =
-    match t with [] -> None | el :: _tl -> Some [ el ]
+    match t with
+    | [] -> None
+    | el :: _tl -> Some [el]
 end
 
 (* TODO: attack vector, nat is unbounded, so very large state *)
-type t = { level : nat; steps : nat; counter : nat; pool : Pool.t }
+type t = {
+  level : nat;
+  steps : nat;
+  counter : nat;
+  pool : Pool.t;
+}
 
-let single_step_data t =
+let _empty = Pool.empty
+let _single_step_data t =
   let { level; steps; counter; pool } = t in
   match Pool.single_step_data pool with
   | Some pool -> Some { level; steps; counter; pool }
@@ -57,12 +73,12 @@ let execute_step t =
   let { level; steps; counter; pool } = t in
   match Pool.pop pool with
   | None ->
-      (* can only happen if not enough data was sent *)
-      assert false
+    (* can only happen if not enough data was sent *)
+    assert false
   | Some (el, pool) ->
-      let steps = steps + 1n in
-      let counter = el + counter in
-      { level; steps; counter; pool }
+    let steps = steps + 1n in
+    let counter = el + counter in
+    { level; steps; counter; pool }
 
 let hash (t : t) =
   let steps = t.steps in

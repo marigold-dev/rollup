@@ -29,16 +29,16 @@ type replay_state = {
 type state =
   | Handshake of handshake_state
   | Searching of searching_state
-  | Replay of replay_state
+  | Replay    of replay_state
 type t = state
 
 type move =
-  | Move_handshake of { final_state_hash : state_hash }
+  | Move_handshake      of { final_state_hash : state_hash }
   | Move_mid_state_hash of { mid_state_hash : state_hash }
-  | Move_replay of { vm_state : Vm.t }
+  | Move_replay         of { vm_state : Vm.t }
 
 type move_result =
-  | Move_result_winner of player
+  | Move_result_winner  of player
   | Move_result_waiting of state
   | Move_result_invalid
 
@@ -51,11 +51,11 @@ let search_state t =
         committer_mid_state_hash = _;
         rejector_mid_state_hash = _;
       } ->
-      Some search_state
+    Some search_state
   | Replay _ -> None
 
 let play ~previous_state_hash ~committer_steps ~committer_state_hash
-    ~rejector_steps ~rejector_mid_state_hash =
+    ~rejector_steps =
   let () = assert (committer_steps >= 2n) in
   let () = assert (rejector_steps >= 2n) in
 
@@ -77,7 +77,7 @@ let play ~previous_state_hash ~committer_steps ~committer_state_hash
             final_state_hash = committer_state_hash;
           };
         committer_mid_state_hash = None;
-        rejector_mid_state_hash = Some rejector_mid_state_hash;
+        rejector_mid_state_hash = None;
       }
 
 let move_handshake ~final_state_hash handshake =
@@ -91,8 +91,7 @@ let move_handshake ~final_state_hash handshake =
         search_state;
         committer_mid_state_hash = None;
         rejector_mid_state_hash = Some rejector_mid_state_hash;
-      }
-  in
+      } in
   Move_result_waiting state
 
 (* move_mid_state_hash *)
@@ -105,8 +104,7 @@ let find_mid_step ~initial_step ~final_step =
 let step_search_state ~committer_mid_state_hash ~rejector_mid_state_hash
     search_state =
   let { initial_step; initial_state_hash; final_step; final_state_hash } =
-    search_state
-  in
+    search_state in
   let mid_state_hash = committer_mid_state_hash in
   let mid_step = find_mid_step ~initial_step ~final_step in
 
@@ -128,8 +126,7 @@ let finalize_turn ~committer_mid_state_hash ~rejector_mid_state_hash
     current_search_state =
   let search_state =
     step_search_state ~committer_mid_state_hash ~rejector_mid_state_hash
-      current_search_state
-  in
+      current_search_state in
 
   if search_state.initial_step + 1n = search_state.final_step then
     let {
@@ -138,8 +135,7 @@ let finalize_turn ~committer_mid_state_hash ~rejector_mid_state_hash
       final_step = _;
       final_state_hash = expected_state_hash;
     } =
-      search_state
-    in
+      search_state in
     Replay { base_state_hash; expected_state_hash }
   else
     Searching
@@ -151,8 +147,7 @@ let finalize_turn ~committer_mid_state_hash ~rejector_mid_state_hash
 
 let move_mid_state_hash player ~mid_state_hash searching =
   let { search_state; committer_mid_state_hash; rejector_mid_state_hash } =
-    searching
-  in
+    searching in
 
   (* TODO:
      should we punish players for trying to make duplicated move?
@@ -163,16 +158,15 @@ let move_mid_state_hash player ~mid_state_hash searching =
   let committer_mid_state_hash, rejector_mid_state_hash =
     match player with
     | Committer -> (Some mid_state_hash, rejector_mid_state_hash)
-    | Rejector -> (committer_mid_state_hash, Some mid_state_hash)
-  in
+    | Rejector -> (committer_mid_state_hash, Some mid_state_hash) in
   let state =
     match (committer_mid_state_hash, rejector_mid_state_hash) with
     | Some committer_mid_state_hash, Some rejector_mid_state_hash ->
-        finalize_turn ~committer_mid_state_hash ~rejector_mid_state_hash
-          search_state
+      finalize_turn ~committer_mid_state_hash ~rejector_mid_state_hash
+        search_state
     | committer_mid_state_hash, rejector_mid_state_hash ->
-        Searching
-          { search_state; committer_mid_state_hash; rejector_mid_state_hash }
+      Searching
+        { search_state; committer_mid_state_hash; rejector_mid_state_hash }
   in
   Move_result_waiting state
 
@@ -185,14 +179,15 @@ let move_replay vm_state replay_state =
       if Vm.hash vm_state = expected_state_hash then Committer else Rejector
     in
     Move_result_winner winner
-  else Move_result_invalid
+  else
+    Move_result_invalid
 
 let move player move state =
   match (player, move, state) with
   | Committer, Move_handshake { final_state_hash }, Handshake handshake ->
-      move_handshake ~final_state_hash handshake
+    move_handshake ~final_state_hash handshake
   | _, Move_mid_state_hash { mid_state_hash }, Searching searching_state ->
-      move_mid_state_hash player ~mid_state_hash searching_state
+    move_mid_state_hash player ~mid_state_hash searching_state
   | _, Move_replay { vm_state }, Replay replay_state ->
-      move_replay vm_state replay_state
+    move_replay vm_state replay_state
   | _ -> Move_result_invalid

@@ -55,6 +55,12 @@ module Big_map : sig
   val remove : 'key -> ('key, 'value) big_map -> ('key, 'value) big_map
 
   val mem : 'key -> ('key, 'value) big_map -> bool
+
+  val get_and_update :
+    'key ->
+    'value option ->
+    ('key, 'value) big_map ->
+    'value option * ('key, 'value) big_map
 end = struct
   let empty = assert false
 
@@ -65,6 +71,8 @@ end = struct
   let remove = assert false
 
   let mem = assert false
+
+  let get_and_update = assert false
 end
 
 module Set : sig

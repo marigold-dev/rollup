@@ -4,11 +4,11 @@ type state
 type t = state
 
 type move =
-  | Move_handshake of { final_state_hash : state_hash }
+  | Move_handshake      of { final_state_hash : state_hash }
   | Move_mid_state_hash of { mid_state_hash : state_hash }
-  | Move_replay of { vm_state : Vm.t }
+  | Move_replay         of { vm_state : Vm.t }
 type move_result =
-  | Move_result_winner of player
+  | Move_result_winner  of player
   | Move_result_waiting of state
   | Move_result_invalid
 
@@ -17,7 +17,6 @@ val play :
   committer_steps:steps ->
   committer_state_hash:state_hash ->
   rejector_steps:steps ->
-  rejector_mid_state_hash:state_hash ->
   t
 
 val move : player -> move -> state -> move_result

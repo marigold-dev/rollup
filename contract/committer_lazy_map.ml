@@ -1,32 +1,25 @@
 open Environment
 
-type t = { length : nat; items : (committer, Commit.t) big_map }
+type t = (level * committer, Commit.t) big_map
 
-let empty () = { length = 0n; items = Big_map.empty }
+let empty () = Big_map.empty
 
-let append committer commit t =
-  if Big_map.mem committer t.items then None
-  else
-    let length = t.length + 1n in
-    let items = Big_map.add committer commit t.items in
-    Some { length; items }
+let append level committer commit (t : t) =
+  if Big_map.mem (level, committer) t then None
+  else Some (Big_map.add (level, committer) commit t)
 
-let update committer commit t =
+let update level committer commit (t : t) =
   (* TODO: this is unneeded but hmm *)
-  if Big_map.mem committer t.items then
-    let items = Big_map.add committer commit t.items in
-    Some { length = t.length; items }
+  (* TODO: I think get_and_update would be cheaper *)
+  if Big_map.mem (level, committer) t then
+    Some (Big_map.add (level, committer) commit t)
   else None
 
-let remove committer t =
+let remove level committer (t : t) =
   (* TODO: this is unneeded but hmm *)
-  if Big_map.mem committer t.items then
-    let length = abs (t.length - 1n) in
-    let items = Big_map.remove committer t.items in
-    Some { length; items }
+  (* TODO: I think get_and_update would be cheaper *)
+  if Big_map.mem (level, committer) t then
+    Some (Big_map.remove (level, committer) t)
   else None
 
-let find state_hash t = Big_map.find_opt state_hash t.items
-let mem state_hash t = Big_map.mem state_hash t.items
-
-let length t = t.length
+let find level committer (t : t) = Big_map.find_opt (level, committer) t
