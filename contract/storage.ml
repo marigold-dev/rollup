@@ -127,38 +127,74 @@ end = struct
     { commits; games }
 end
 
+module Collateral_vault : sig
+  type t
+
+  (* O(1) *)
+  val empty : unit -> t
+
+  (* O(log2 length) *)
+  val has_stake : address -> t -> bool
+
+  (* O(log2 length) *)
+  val join : address -> t -> t
+
+  (* O(log2 length) *)
+  val burn : address -> t -> t
+end = struct
+  type t = (address, unit) big_map
+
+  let empty () : t = Big_map.empty
+
+  let has_stake address (t : t) = Big_map.mem address t
+
+  let join address (t : t) = Big_map.add address () t
+
+  let burn address (t : t) = Big_map.remove address t
+end
+
 type game
 type t = {
+  (* open levels *)
   garbage : Garbage.t;
   levels : (level, Level_data.t) big_map;
   commits : (level * committer, Commit_data.t) big_map;
   games : (level * committer * rejector, game) big_map;
+  (* closed levels *)
+  (* TODO: should this be a tuple state_hash * level *)
+  trusted_state_hash : state_hash;
+  trusted_level : level;
+  (* subscription *)
+  collateral_vault : Collateral_vault.t;
 }
 
 (* TODO: this module fetchs data twice for no good reason
          such as commit_data that was already fetched externally *)
 
-let empty () =
+let make ~initial_trusted_state_hash ~initial_trusted_level =
   {
     garbage = Garbage.empty ();
     levels = Big_map.empty;
     commits = Big_map.empty;
     games = Big_map.empty;
+    trusted_state_hash = initial_trusted_state_hash;
+    trusted_level = initial_trusted_level;
+    collateral_vault = Collateral_vault.empty ();
   }
 let has_garbage t = not (Garbage.is_empty t.garbage)
 
 let remove_level ~level t =
-  let { garbage; levels; commits; games } = t in
+  let { garbage; levels; _ } = t in
   match Big_map.find_opt level levels with
   | None -> None
   | Some level_data ->
     let garbage = Garbage.level_removed level_data garbage in
     let levels = Big_map.remove level levels in
 
-    Some { garbage; levels; commits; games }
+    Some { t with garbage; levels }
 
 let append_commit ~level ~committer ~commit_data t =
-  let { garbage; levels; commits; games } = t in
+  let { levels; commits; _ } = t in
   match Big_map.find_opt (level, committer) commits with
   | Some _commit_data -> None
   | None ->
@@ -171,10 +207,10 @@ let append_commit ~level ~committer ~commit_data t =
       Big_map.add level level_data levels in
     let commits = Big_map.add (level, committer) commit_data commits in
 
-    Some { garbage; levels; commits; games }
+    Some { t with levels; commits }
 
 let remove_commit ~level ~committer t =
-  let { garbage; levels; commits; games } = t in
+  let { garbage; levels; commits; _ } = t in
   let commit_key = (level, committer) in
   match Big_map.find_opt commit_key commits with
   | None -> None
@@ -188,10 +224,10 @@ let remove_commit ~level ~committer t =
       Big_map.add level level_data levels in
     let commits = Big_map.remove commit_key commits in
 
-    Some { garbage; levels; commits; games }
+    Some { t with garbage; levels; commits }
 
 let collect_commit ~level ~committer t =
-  let { garbage; levels; commits; games } = t in
+  let { garbage; levels; commits; _ } = t in
   let commit_key = (level, committer) in
   match Big_map.find_opt commit_key commits with
   | None -> None
@@ -204,10 +240,10 @@ let collect_commit ~level ~committer t =
         Garbage.commit_removed commit_data garbage in
       let commits = Big_map.remove commit_key commits in
 
-      Some { garbage; levels; commits; games }
+      Some { t with garbage; levels; commits }
 
 let append_game ~level ~committer ~rejector game t =
-  let { garbage; levels; commits; games } = t in
+  let { commits; games; _ } = t in
   let commit_key = (level, committer) in
   let game_key = (level, committer, rejector) in
   match Big_map.find_opt game_key games with
@@ -221,10 +257,10 @@ let append_game ~level ~committer ~rejector game t =
       Big_map.add commit_key commit_data commits in
     let games = Big_map.add game_key game games in
 
-    Some { garbage; levels; commits; games }
+    Some { t with commits; games }
 
 let remove_game ~level ~committer ~rejector t =
-  let { garbage; levels; commits; games } = t in
+  let { commits; games; _ } = t in
   let commit_key = (level, committer) in
   let game_key = (level, committer, rejector) in
   if Big_map.mem game_key games then
@@ -236,12 +272,12 @@ let remove_game ~level ~committer ~rejector t =
         Big_map.add commit_key commit_data commits in
       let games = Big_map.remove game_key games in
 
-      Some { garbage; levels; commits; games }
+      Some { t with commits; games }
   else
     None
 
 let collect_game ~level ~committer ~rejector t =
-  let { garbage; levels; commits; games } = t in
+  let { garbage; commits; games; _ } = t in
   let commit_key = (level, committer) in
   let game_key = (level, committer, rejector) in
   if Big_map.mem game_key games then
@@ -251,6 +287,26 @@ let collect_game ~level ~committer ~rejector t =
       let garbage = Garbage.game_collected garbage in
       let games = Big_map.remove game_key games in
 
-      Some { garbage; levels; commits; games }
+      Some { t with garbage; commits; games }
   else
     None
+
+let trust_level ~level t = { t with trusted_level = level }
+let trusted_level t = t.trusted_level
+
+let trust_state_hash state_hash t = { t with trusted_state_hash = state_hash }
+let trusted_state_hash t = t.trusted_state_hash
+
+let has_stake address t =
+  let { collateral_vault; _ } = t in
+  Collateral_vault.has_stake address collateral_vault
+
+let join address t =
+  let { collateral_vault; _ } = t in
+  let collateral_vault = Collateral_vault.join address collateral_vault in
+  { t with collateral_vault }
+
+let burn address t =
+  let { collateral_vault; _ } = t in
+  let collateral_vault = Collateral_vault.burn address collateral_vault in
+  { t with collateral_vault }
