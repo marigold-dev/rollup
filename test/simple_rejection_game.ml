@@ -41,27 +41,13 @@ type move_result =
   | Move_result_waiting of state
   | Move_result_invalid
 
-let play ~previous_state_hash ~committer_steps ~committer_state_hash
-    ~rejector_steps =
+let play ~previous_state_hash ~committer_steps ~rejector_steps =
   let () = assert (committer_steps >= [%nat 2]) in
   let () = assert (rejector_steps >= [%nat 2]) in
 
-  if committer_steps > rejector_steps then
-    Handshake
-      { initial_state_hash = previous_state_hash; final_step = rejector_steps }
-  else
-    Searching
-      {
-        search_state =
-          {
-            initial_step = [%nat 0];
-            initial_state_hash = previous_state_hash;
-            final_step = committer_steps;
-            final_state_hash = committer_state_hash;
-          };
-        committer_mid_state_hash = None;
-        rejector_mid_state_hash = None;
-      }
+  let final_step = min committer_steps rejector_steps in
+  (* TODO: possible optimization, when committer_steps <= rejector_steps *)
+  Handshake { initial_state_hash = previous_state_hash; final_step }
 
 let move_handshake ~final_state_hash handshake =
   let { initial_state_hash; final_step } = handshake in

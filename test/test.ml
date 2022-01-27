@@ -404,24 +404,9 @@ let bootstrap seeds moves =
   Stdlib.List.iter (fun (path, state) -> apply_moves ~path state moves) states
 
 (* play *)
-let agree_on_steps ~previous_state_hash ~steps ~committer_state_hash =
+let agree_on_steps ~previous_state_hash ~steps =
   let state =
-    play ~previous_state_hash ~committer_steps:steps ~committer_state_hash
-      ~rejector_steps:steps in
-  let expected_state =
-    Expected_state_searching
-      {
-        expected_initial_step = nat 0;
-        expected_initial_state_hash = previous_state_hash;
-        expected_final_step = steps;
-        expected_final_state_hash = committer_state_hash;
-      } in
-  { state; expected_state }
-let committer_steps_bigger ~previous_state_hash ~steps ~committer_state_hash =
-  let state =
-    play ~previous_state_hash
-      ~committer_steps:(steps + nat 1)
-      ~committer_state_hash ~rejector_steps:steps in
+    play ~previous_state_hash ~committer_steps:steps ~rejector_steps:steps in
   let expected_state =
     Expected_state_handshake
       {
@@ -429,17 +414,27 @@ let committer_steps_bigger ~previous_state_hash ~steps ~committer_state_hash =
         expected_final_step = steps;
       } in
   { state; expected_state }
-let rejector_steps_bigger ~previous_state_hash ~steps ~committer_state_hash =
+let committer_steps_bigger ~previous_state_hash ~steps =
   let state =
-    play ~previous_state_hash ~committer_steps:steps ~committer_state_hash
-      ~rejector_steps:(steps + nat 1) in
+    play ~previous_state_hash
+      ~committer_steps:(steps + nat 1)
+      ~rejector_steps:steps in
   let expected_state =
-    Expected_state_searching
+    Expected_state_handshake
       {
-        expected_initial_step = nat 0;
         expected_initial_state_hash = previous_state_hash;
         expected_final_step = steps;
-        expected_final_state_hash = committer_state_hash;
+      } in
+  { state; expected_state }
+let rejector_steps_bigger ~previous_state_hash ~steps =
+  let state =
+    play ~previous_state_hash ~committer_steps:steps
+      ~rejector_steps:(steps + nat 1) in
+  let expected_state =
+    Expected_state_handshake
+      {
+        expected_initial_state_hash = previous_state_hash;
+        expected_final_step = steps;
       } in
   { state; expected_state }
 
@@ -777,9 +772,7 @@ let committer_replay_invalid ~invalid_state_hash state =
 let rejector_replay_invalid ~invalid_state_hash state =
   player_replay_invalid Rejector ~invalid_state_hash state
 
-let seed f () =
-  f ~previous_state_hash:(committer_hash ()) ~steps:(steps ())
-    ~committer_state_hash:(committer_hash ())
+let seed f () = f ~previous_state_hash:(committer_hash ()) ~steps:(steps ())
 let seeds =
   [
     ("agree_on_steps", seed agree_on_steps);

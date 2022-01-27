@@ -11,11 +11,10 @@ type move_result =
   | Move_result_waiting of state
   | Move_result_invalid
 
-let play ~previous_state_hash ~committer_steps ~committer_state_hash
-    ~rejector_steps =
+let play ~previous_state_hash ~committer_steps ~rejector_steps =
   let simple_rejection_game_state =
     Simple_rejection_game.play ~previous_state_hash ~committer_steps
-      ~committer_state_hash ~rejector_steps in
+      ~rejector_steps in
   { previous_state = None; state = simple_rejection_game_state }
 
 let move player move state =
