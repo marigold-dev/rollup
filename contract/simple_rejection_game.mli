@@ -6,6 +6,7 @@ type t = state
 type move =
   | Move_handshake      of { final_state_hash : state_hash }
   | Move_mid_state_hash of { mid_state_hash : state_hash }
+  (* TODO: replay on last movement *)
   | Move_replay         of { vm_state : Vm.t }
 type move_result =
   | Move_result_winner  of player

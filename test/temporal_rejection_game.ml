@@ -3,7 +3,8 @@ open Turn
 open Forkable_rejection_game
 
 type state = {
-  last_turn : Turn.t;
+  last_committer_turn : Turn.t;
+  last_rejector_turn : current_turn;
   state : Forkable_rejection_game.state;
 }
 type t = state
@@ -63,7 +64,7 @@ let move ~current_turn player move state =
     let must_timeout =
       last_turn <> current_turn
       &&
-      (* C -> _ -> C | R -> _ -> R*)
+      (* C -> F_C -> R -> F_R *)
       match (kind last_turn, player) with
       | Turn_committer, Committer -> true
       | Turn_rejector, Rejector -> true
