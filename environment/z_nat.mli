@@ -11,6 +11,7 @@ val ( >= ) : nat -> nat -> bool
 
 val abs : int -> nat
 val ediv : nat -> nat -> (nat * nat) option
+val min : nat -> nat -> nat
 
 module Read : sig
   val to_z : nat -> Z.t

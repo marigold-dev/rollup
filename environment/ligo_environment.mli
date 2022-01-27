@@ -14,6 +14,7 @@ val ( < ) : nat -> nat -> bool
 val ( >= ) : nat -> nat -> bool
 val abs : int -> nat
 val ediv : nat -> nat -> (nat * nat) option
+val min : nat -> nat -> nat
 
 module Pack : sig
   val nat : nat -> bytes

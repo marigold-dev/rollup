@@ -13,6 +13,7 @@ let ( >= ) = ( >= )
 
 let abs = abs
 let ediv = ediv
+let min (a : nat) (b : nat) = min a b
 
 module Read = struct
   let to_z = Read.to_z
