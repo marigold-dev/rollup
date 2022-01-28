@@ -19,7 +19,10 @@ open Environment
 (* TODO: submit hash only *)
 type submission = bytes
 type state_hash = bytes
-type rejection = { operation_id : int; proof : bytes }
+type rejection = {
+  operation_id : int;
+  proof : bytes;
+}
 
 (* TODO: BIG TODO: go over all asserts and slash whoever is needed *)
 
@@ -80,36 +83,46 @@ type storage = {
 }
 type parameter =
   (* users *)
-  | Submit of submission
+  | Submit       of submission
   (* validators *)
   | Join
   | Exit
-  | Commit of {
+  | Commit       of {
       level : level;
       parent_state_hash : state_hash;
       state_hash : state_hash;
       steps : steps;
     }
-  | Fork_commit of { level : level; committer : committer }
-  | Reject of {
+  | Fork_commit  of {
+      level : level;
+      committer : committer;
+    }
+  | Reject       of {
       level : level;
       committer : committer;
       (* TODO: ensure that a rejector is always using the same defend_as hash *)
       defend_as : committer;
       mid_state_hash : state_hash;
     }
-  | Fork_reject of { level : level; committer : committer; rejector : rejector }
-  | Defend of {
+  | Fork_reject  of {
+      level : level;
+      committer : committer;
+      rejector : rejector;
+    }
+  | Defend       of {
       level : level;
       rejector : rejector;
       move : Rejection_game.defend;
     }
-  | Attack of {
+  | Attack       of {
       level : level;
       committer : committer;
       move : Rejection_game.attack;
     }
-  | Trust_commit of { level : level; committer : committer }
+  | Trust_commit of {
+      level : level;
+      committer : committer;
+    }
 (* TODO? fuse commit *)
 
 (* O(1) *)
@@ -132,10 +145,9 @@ let exit (storage : storage) =
   let contract =
     match Tezos.get_contract_opt sender with
     | Some contract -> contract
-    | None -> failwith "failed to send your money back"
-  in
+    | None -> failwith "failed to send your money back" in
   let transaction = Tezos.transaction () stake_amount contract in
-  ([ transaction ], { levels; trusted; collateral_vault })
+  ([transaction], { levels; trusted; collateral_vault })
 
 (* TODO: is it okay to accept commit(102) without having commit(101)?
     I think so, just the effects need to be ordered *)
@@ -169,8 +181,7 @@ let append_commit ~level commit committers storage =
   let committers =
     match Committer_lazy_map.append committer commit committers with
     | Some committers -> committers
-    | None -> failwith "duplicated committer"
-  in
+    | None -> failwith "duplicated committer" in
   let levels = Big_map.add level committers levels in
   { levels; trusted; collateral_vault }
 
@@ -183,8 +194,7 @@ let commit ~level ~parent_state_hash ~state_hash ~steps storage =
   let committers =
     match Big_map.find_opt level levels with
     | Some committers -> committers
-    | None -> Committer_lazy_map.empty ()
-  in
+    | None -> Committer_lazy_map.empty () in
 
   let commit = Commit.make ~level ~parent_state_hash ~state_hash ~steps in
   append_commit ~level commit committers storage
@@ -198,19 +208,16 @@ let fork_commit ~level ~base_committer storage =
   let committers =
     match Big_map.find_opt level levels with
     | Some committers -> committers
-    | None -> Committer_lazy_map.empty ()
-  in
+    | None -> Committer_lazy_map.empty () in
 
   let base_commit =
     match Committer_lazy_map.find base_committer committers with
     | Some commit -> commit
-    | None -> failwith "this committer has no commit"
-  in
+    | None -> failwith "this committer has no commit" in
   let commit =
     match Commit.fork base_commit with
     | Some commit -> commit
-    | None -> failwith "a recently created commit cannot be forked"
-  in
+    | None -> failwith "a recently created commit cannot be forked" in
   append_commit ~level commit committers storage
 
 let reject ~level ~committer ~defend_as ~mid_state_hash ~storage =
@@ -226,29 +233,25 @@ let reject ~level ~committer ~defend_as ~mid_state_hash ~storage =
     match Big_map.find_opt level levels with
     | Some committers -> committers
     (* TODO: should this be a slash??? No data present *)
-    | None -> Committer_lazy_map.empty ()
-  in
+    | None -> Committer_lazy_map.empty () in
 
   let committer_commit =
     match Committer_lazy_map.find committer committers with
     | Some commit -> commit
     (* TODO: should this be a slash??? *)
-    | None -> failwith "invalid committer state hash"
-  in
+    | None -> failwith "invalid committer state hash" in
 
   let rejector_commit =
     match Committer_lazy_map.find defend_as committers with
     | Some commit -> commit
     (* TODO: should this be a slash??? *)
-    | None -> failwith "invalid rejector committer"
-  in
+    | None -> failwith "invalid rejector committer" in
 
   (* rejector agrees with parent_state_hash *)
   let () =
     assert (
       Commit.parent_state_hash committer_commit
-      = Commit.parent_state_hash rejector_commit)
-  in
+      = Commit.parent_state_hash rejector_commit) in
 
   (* rejector disagrees with state_hash *)
   let () =
@@ -262,21 +265,18 @@ let reject ~level ~committer ~defend_as ~mid_state_hash ~storage =
       ~committer:
         (Commit.state_hash committer_commit, Commit.steps committer_commit)
       ~rejector:(Commit.state_hash rejector_commit, Commit.steps rejector_commit)
-      ~mid_state_hash
-  in
+      ~mid_state_hash in
 
   let committer_commit =
     match Commit.append_game ~rejector:new_rejector game committer_commit with
     | Some commit -> commit
-    | None -> failwith "duplicated rejectin game"
-  in
+    | None -> failwith "duplicated rejectin game" in
 
   (* TODO: abstract this in Committer_lazy_map *)
   let committers =
     match Committer_lazy_map.update committer committer_commit committers with
     | Some committer -> committer
-    | None -> failwith "unreachable"
-  in
+    | None -> failwith "unreachable" in
   let levels = Big_map.add level committers levels in
 
   { levels; trusted; collateral_vault }
@@ -293,28 +293,24 @@ let fork_reject ~level ~committer ~base_rejector storage =
     match Big_map.find_opt level levels with
     | Some committers -> committers
     (* TODO: should this be a slash??? No data present *)
-    | None -> Committer_lazy_map.empty ()
-  in
+    | None -> Committer_lazy_map.empty () in
 
   let commit =
     match Committer_lazy_map.find committer committers with
     | Some commit -> commit
     (* TODO: should this be a slash??? *)
-    | None -> failwith "invalid committer state hash"
-  in
+    | None -> failwith "invalid committer state hash" in
 
   let base_game =
     match Commit.find_game ~rejector:base_rejector commit with
     | Some base_game -> base_game
     (* TODO: should this be a slash??? *)
-    | None -> failwith "invalid rejector"
-  in
+    | None -> failwith "invalid rejector" in
 
   let game =
     match Rejection_game.fork base_game with
     | Some game -> game
-    | None -> failwith "recently created game"
-  in
+    | None -> failwith "recently created game" in
 
   let commit =
     match Commit.append_game ~rejector game commit with
@@ -326,8 +322,7 @@ let fork_reject ~level ~committer ~base_rejector storage =
   let committers =
     match Committer_lazy_map.update committer commit committers with
     | Some committer -> committer
-    | None -> failwith "unreachable"
-  in
+    | None -> failwith "unreachable" in
   let levels = Big_map.add level committers levels in
 
   { levels; trusted; collateral_vault }
@@ -336,15 +331,18 @@ let handle_move_result ~committer (move_result : Commit.move_result option)
     committers =
   match move_result with
   | Some Rejector_won -> Committer_lazy_map.remove committer committers
-  | Some (Committer_won commit) | Some (Commit commit) ->
-      Committer_lazy_map.update committer commit committers
+  | Some (Committer_won commit)
+  | Some (Commit commit) ->
+    Committer_lazy_map.update committer commit committers
   | None -> failwith "invalid rejector"
 let slash_move_result ~committer ~rejector
     (move_result : Commit.move_result option) collateral_vault =
   match move_result with
   | Some (Committer_won _) -> Collateral_vault.burn rejector collateral_vault
   | Some Rejector_won -> Collateral_vault.burn committer collateral_vault
-  | Some (Commit _) | None -> collateral_vault
+  | Some (Commit _)
+  | None ->
+    collateral_vault
 
 let defend ~level ~rejector ~move storage =
   let committer = sender in
@@ -356,24 +354,20 @@ let defend ~level ~rejector ~move storage =
     match Big_map.find_opt level levels with
     | Some committers -> committers
     (* TODO: should this be a slash??? No data present *)
-    | None -> Committer_lazy_map.empty ()
-  in
+    | None -> Committer_lazy_map.empty () in
   let commit =
     match Committer_lazy_map.find committer committers with
     | Some commit -> commit
     (* TODO: should this be a slash??? *)
-    | None -> failwith "invalid committer state hash"
-  in
+    | None -> failwith "invalid committer state hash" in
 
   let move_result = Commit.defend ~rejector move commit in
   let collateral_vault =
-    slash_move_result ~committer ~rejector move_result collateral_vault
-  in
+    slash_move_result ~committer ~rejector move_result collateral_vault in
   let committers =
     match handle_move_result ~committer move_result committers with
     | Some committers -> committers
-    | None -> assert false
-  in
+    | None -> assert false in
 
   let levels = Big_map.add level committers levels in
 
@@ -389,24 +383,20 @@ let attack ~level ~committer ~move storage =
     match Big_map.find_opt level levels with
     | Some committers -> committers
     (* TODO: should this be a slash??? No data present *)
-    | None -> Committer_lazy_map.empty ()
-  in
+    | None -> Committer_lazy_map.empty () in
 
   let commit =
     match Committer_lazy_map.find committer committers with
     | Some commit -> commit
     (* TODO: should this be a slash??? *)
-    | None -> failwith "invalid committer state hash"
-  in
+    | None -> failwith "invalid committer state hash" in
   let move_result = Commit.attack ~rejector move commit in
   let collateral_vault =
-    slash_move_result ~committer ~rejector move_result collateral_vault
-  in
+    slash_move_result ~committer ~rejector move_result collateral_vault in
   let committers =
     match handle_move_result ~committer move_result committers with
     | Some committers -> committers
-    | None -> assert false
-  in
+    | None -> assert false in
   let levels = Big_map.add level committers levels in
 
   { levels; trusted; collateral_vault }
@@ -425,15 +415,13 @@ let trust_commit ~level ~committer storage =
     match Big_map.find_opt level levels with
     | Some committers -> committers
     (* TODO: should this be a slash??? No data present *)
-    | None -> Committer_lazy_map.empty ()
-  in
+    | None -> Committer_lazy_map.empty () in
 
   let commit =
     match Committer_lazy_map.find committer committers with
     | Some commit -> commit
     (* TODO: should this be a slash??? *)
-    | None -> failwith "invalid committer state hash"
-  in
+    | None -> failwith "invalid committer state hash" in
 
   let () = assert (Commit.parent_state_hash commit = trusted_state_hash) in
   let () = assert (Commit.rejections commit = 0n) in
@@ -446,39 +434,34 @@ let main ((action, storage) : parameter * storage) =
   (* TODO: assert amount everywhere *)
   match action with
   | Submit submission ->
-      let storage = submit submission storage in
-      (([] : operation list), storage)
+    let storage = submit submission storage in
+    (([] : operation list), storage)
   | Join ->
-      let storage = join storage in
-      (([] : operation list), storage)
+    let storage = join storage in
+    (([] : operation list), storage)
   | Exit -> exit storage
   | Commit { level; parent_state_hash; state_hash; steps } ->
-      let storage =
-        commit ~level ~parent_state_hash ~state_hash ~steps storage
-      in
-      (([] : operation list), storage)
+    let storage = commit ~level ~parent_state_hash ~state_hash ~steps storage in
+    (([] : operation list), storage)
   | Fork_commit { level; committer } ->
-      let storage = fork_commit ~level ~base_committer:committer storage in
-      (([] : operation list), storage)
+    let storage = fork_commit ~level ~base_committer:committer storage in
+    (([] : operation list), storage)
   | Reject { level; committer; defend_as; mid_state_hash } ->
-      let storage =
-        reject ~level ~committer ~defend_as ~mid_state_hash ~storage
-      in
-      (([] : operation list), storage)
+    let storage = reject ~level ~committer ~defend_as ~mid_state_hash ~storage in
+    (([] : operation list), storage)
   | Fork_reject { level; committer; rejector } ->
-      let storage =
-        fork_reject ~level ~committer ~base_rejector:rejector storage
-      in
-      (([] : operation list), storage)
+    let storage =
+      fork_reject ~level ~committer ~base_rejector:rejector storage in
+    (([] : operation list), storage)
   | Defend { level; rejector; move } ->
-      let storage = defend ~level ~rejector ~move storage in
-      (([] : operation list), storage)
+    let storage = defend ~level ~rejector ~move storage in
+    (([] : operation list), storage)
   | Attack { level; committer; move } ->
-      let storage = attack ~level ~committer ~move storage in
-      (([] : operation list), storage)
+    let storage = attack ~level ~committer ~move storage in
+    (([] : operation list), storage)
   | Trust_commit { level; committer } ->
-      let storage = trust_commit ~level ~committer storage in
-      (([] : operation list), storage)
+    let storage = trust_commit ~level ~committer storage in
+    (([] : operation list), storage)
 
 (* because the honest player is always playing the simple game,
    where they can defend their commit against everyone else and
