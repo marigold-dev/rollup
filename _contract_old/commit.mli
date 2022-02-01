@@ -34,7 +34,10 @@ val remove_game : rejector:rejector -> t -> t option
 (* [find_game ~rejector game commit] None when missing *)
 val find_game : rejector:rejector -> t -> Rejection_game.t option
 
-type move_result = Committer_won of t | Rejector_won | Commit of t
+type move_result =
+  | Committer_won of t
+  | Rejector_won
+  | Commit        of t
 
 (* [defend ~rejector move commit] None when missing *)
 val defend :
