@@ -40,6 +40,7 @@
     "@opam/mirage-crypto-rng": "0.10.5"
   },
   "devDependencies": {
+    "@opam/utop": "*",
     "@opam/ocamlformat": "*",
     "@opam/ocamlformat-rpc": "*",
     "@opam/ocaml-lsp-server": "*",
