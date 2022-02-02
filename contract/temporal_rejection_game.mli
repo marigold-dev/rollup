@@ -19,8 +19,8 @@ type move_result = private
 val play :
   current_turn:Turn.t ->
   initial_state_hash:state_hash ->
-  committer_steps:steps ->
-  rejector_steps:steps ->
+  committer_steps:Steps.non_zero ->
+  rejector_steps:Steps.non_zero ->
   t option
 
 val move : current_turn:Turn.t -> player -> move -> state -> move_result

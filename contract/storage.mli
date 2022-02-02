@@ -20,7 +20,7 @@ module Commit_data : sig
   val state_hash : t -> state_hash
 
   (* O(1) *)
-  val steps : t -> steps
+  val steps : t -> Steps.non_zero
 
   (* O(1) *)
   val games : t -> nat
@@ -55,7 +55,7 @@ val append_commit :
   committer:committer ->
   previous_state_hash:state_hash ->
   state_hash:state_hash ->
-  steps:steps ->
+  steps:Steps.non_zero ->
   t ->
   t option
 

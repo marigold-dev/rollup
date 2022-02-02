@@ -7,14 +7,14 @@ open Environment
 (* TODO: validate step is inside of state_hash, if it's not,
          which attack is possible? *)
 type search_state = {
-  initial_step : steps;
+  initial_step : Steps.t;
   initial_state_hash : state_hash;
-  final_step : steps;
+  final_step : Steps.t;
   final_state_hash : state_hash;
 }
 type handshake_state = {
   initial_state_hash : state_hash;
-  final_step : steps;
+  final_step : Steps.t;
 }
 type searching_state = {
   search_state : search_state;
@@ -42,44 +42,20 @@ type move_result =
   | Move_result_invalid
 
 let play ~initial_state_hash ~committer_steps ~rejector_steps =
-  let () = assert (committer_steps >= [%nat 2]) in
-  let () = assert (rejector_steps >= [%nat 2]) in
+  let committer_steps = Steps.of_non_zero committer_steps in
+  let rejector_steps = Steps.of_non_zero rejector_steps in
 
-  let final_step = min committer_steps rejector_steps in
+  (* TODO: handle case where there was a no step or two steps *)
+  let final_step = Steps.min committer_steps rejector_steps in
   (* TODO: possible optimization, when committer_steps <= rejector_steps *)
   Handshake { initial_state_hash; final_step }
-
-let move_handshake ~final_state_hash handshake =
-  let { initial_state_hash; final_step } = handshake in
-  let search_state =
-    {
-      initial_step = [%nat 0];
-      initial_state_hash;
-      final_step;
-      final_state_hash;
-    } in
-  let state =
-    Searching
-      {
-        search_state;
-        committer_mid_state_hash = None;
-        rejector_mid_state_hash = None;
-      } in
-  Move_result_waiting state
-
-(* move_mid_state_hash *)
-let find_mid_step ~initial_step ~final_step =
-  let diff = abs (final_step - initial_step) in
-  match ediv diff [%nat 2] with
-  | Some (step_offset, _remainder) -> initial_step + step_offset
-  | None -> assert false
 
 let step_search_state ~committer_mid_state_hash ~rejector_mid_state_hash
     search_state =
   let { initial_step; initial_state_hash; final_step; final_state_hash } =
     search_state in
   let mid_state_hash = committer_mid_state_hash in
-  let mid_step = find_mid_step ~initial_step ~final_step in
+  let mid_step = Steps.mid_step ~initial_step ~final_step in
 
   if committer_mid_state_hash = rejector_mid_state_hash then
     {
@@ -95,13 +71,11 @@ let step_search_state ~committer_mid_state_hash ~rejector_mid_state_hash
       final_step = mid_step;
       final_state_hash = mid_state_hash;
     }
-let finalize_turn ~committer_mid_state_hash ~rejector_mid_state_hash
-    current_search_state =
-  let search_state =
-    step_search_state ~committer_mid_state_hash ~rejector_mid_state_hash
-      current_search_state in
 
-  if search_state.initial_step + [%nat 1] = search_state.final_step then
+(* TODO: I don't like the name of this function
+         but *)
+let next_state search_state =
+  if Steps.increment search_state.initial_step = search_state.final_step then
     let {
       initial_step = _;
       initial_state_hash = base_state_hash;
@@ -117,6 +91,18 @@ let finalize_turn ~committer_mid_state_hash ~rejector_mid_state_hash
         committer_mid_state_hash = None;
         rejector_mid_state_hash = None;
       }
+
+let move_handshake ~final_state_hash handshake =
+  let { initial_state_hash; final_step } = handshake in
+  let search_state =
+    {
+      initial_step = Steps.zero;
+      initial_state_hash;
+      final_step;
+      final_state_hash;
+    } in
+  let state = next_state search_state in
+  Move_result_waiting state
 
 let move_mid_state_hash player ~mid_state_hash searching =
   let { search_state; committer_mid_state_hash; rejector_mid_state_hash } =
@@ -135,8 +121,10 @@ let move_mid_state_hash player ~mid_state_hash searching =
   let state =
     match (committer_mid_state_hash, rejector_mid_state_hash) with
     | Some committer_mid_state_hash, Some rejector_mid_state_hash ->
-      finalize_turn ~committer_mid_state_hash ~rejector_mid_state_hash
-        search_state
+      let search_state =
+        step_search_state ~committer_mid_state_hash ~rejector_mid_state_hash
+          search_state in
+      next_state search_state
     | committer_mid_state_hash, rejector_mid_state_hash ->
       Searching
         { search_state; committer_mid_state_hash; rejector_mid_state_hash }

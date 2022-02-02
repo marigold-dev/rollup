@@ -4,14 +4,14 @@ open Environment
          can be done for each player at each stage *)
 (* TODO: can we abstract this types away while keeping the tests?*)
 type search_state = private {
-  initial_step : steps;
+  initial_step : Steps.t;
   initial_state_hash : state_hash;
-  final_step : steps;
+  final_step : Steps.t;
   final_state_hash : state_hash;
 }
 type handshake_state = private {
   initial_state_hash : state_hash;
-  final_step : steps;
+  final_step : Steps.t;
 }
 type searching_state = private {
   search_state : search_state;
@@ -39,8 +39,8 @@ type move_result = private
 
 val play :
   initial_state_hash:state_hash ->
-  committer_steps:steps ->
-  rejector_steps:steps ->
+  committer_steps:Steps.non_zero ->
+  rejector_steps:Steps.non_zero ->
   t
 
 val move : player -> move -> state -> move_result

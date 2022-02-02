@@ -11,7 +11,6 @@ type state_hash = bytes
 type input_hash = bytes
 type action_hash = bytes
 type level = nat
-type steps = nat
 
 (* type committer = address
    type rejector = address
@@ -37,3 +36,5 @@ module type Tezos = sig
 end
 
 let stake_amount = assert false
+
+type hash = bytes

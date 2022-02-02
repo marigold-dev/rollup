@@ -56,7 +56,10 @@ module Commit_data : sig
 
   (* O(1) *)
   val make :
-    previous_state_hash:state_hash -> state_hash:state_hash -> steps:steps -> t
+    previous_state_hash:state_hash ->
+    state_hash:state_hash ->
+    steps:Steps.non_zero ->
+    t
 
   (* O(1) *)
   val previous_state_hash : t -> state_hash
@@ -65,7 +68,7 @@ module Commit_data : sig
   val state_hash : t -> state_hash
 
   (* O(1) *)
-  val steps : t -> steps
+  val steps : t -> Steps.non_zero
 
   (* O(1) *)
   val games : t -> nat
@@ -80,7 +83,7 @@ end = struct
     previous_state_hash : state_hash;
     state_hash : state_hash;
     (* TODO: validate steps is inside of the state_hash *)
-    steps : steps;
+    steps : Steps.non_zero;
     games : nat;
   }
 
