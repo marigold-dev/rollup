@@ -15,7 +15,6 @@ type search_state = {
 type handshake_state = {
   initial_state_hash : state_hash;
   final_step : steps;
-  rejector_mid_state_hash : state_hash;
 }
 type searching_state = {
   search_state : search_state;
@@ -24,7 +23,7 @@ type searching_state = {
 }
 type replay_state = {
   base_state_hash : state_hash;
-  expected_state_hash : state_hash;
+  committer_state_hash : state_hash;
 }
 type state =
   | Handshake of handshake_state
@@ -42,63 +41,37 @@ type move_result =
   | Move_result_waiting of state
   | Move_result_invalid
 
-let search_state t =
-  match t with
-  | Handshake _ -> None
-  | Searching
-      {
-        search_state;
-        committer_mid_state_hash = _;
-        rejector_mid_state_hash = _;
-      } ->
-    Some search_state
-  | Replay _ -> None
+let play ~initial_state_hash ~committer_steps ~rejector_steps =
+  let () = assert (committer_steps >= [%nat 2]) in
+  let () = assert (rejector_steps >= [%nat 2]) in
 
-let play ~previous_state_hash ~committer_steps ~committer_state_hash
-    ~rejector_steps =
-  let () = assert (committer_steps >= 2n) in
-  let () = assert (rejector_steps >= 2n) in
-
-  if committer_steps > rejector_steps then
-    Handshake
-      {
-        initial_state_hash = previous_state_hash;
-        final_step = rejector_steps;
-        rejector_mid_state_hash;
-      }
-  else
-    Searching
-      {
-        search_state =
-          {
-            initial_step = 0n;
-            initial_state_hash = previous_state_hash;
-            final_step = committer_steps;
-            final_state_hash = committer_state_hash;
-          };
-        committer_mid_state_hash = None;
-        rejector_mid_state_hash = None;
-      }
+  let final_step = min committer_steps rejector_steps in
+  (* TODO: possible optimization, when committer_steps <= rejector_steps *)
+  Handshake { initial_state_hash; final_step }
 
 let move_handshake ~final_state_hash handshake =
-  let { initial_state_hash; final_step; rejector_mid_state_hash } = handshake in
+  let { initial_state_hash; final_step } = handshake in
   let search_state =
-    { initial_step = 0n; initial_state_hash; final_step; final_state_hash }
-  in
+    {
+      initial_step = [%nat 0];
+      initial_state_hash;
+      final_step;
+      final_state_hash;
+    } in
   let state =
     Searching
       {
         search_state;
         committer_mid_state_hash = None;
-        rejector_mid_state_hash = Some rejector_mid_state_hash;
+        rejector_mid_state_hash = None;
       } in
   Move_result_waiting state
 
 (* move_mid_state_hash *)
 let find_mid_step ~initial_step ~final_step =
   let diff = abs (final_step - initial_step) in
-  match ediv diff 2n with
-  | Some (mid_step, _remainder) -> mid_step
+  match ediv diff [%nat 2] with
+  | Some (step_offset, _remainder) -> initial_step + step_offset
   | None -> assert false
 
 let step_search_state ~committer_mid_state_hash ~rejector_mid_state_hash
@@ -128,15 +101,15 @@ let finalize_turn ~committer_mid_state_hash ~rejector_mid_state_hash
     step_search_state ~committer_mid_state_hash ~rejector_mid_state_hash
       current_search_state in
 
-  if search_state.initial_step + 1n = search_state.final_step then
+  if search_state.initial_step + [%nat 1] = search_state.final_step then
     let {
       initial_step = _;
       initial_state_hash = base_state_hash;
       final_step = _;
-      final_state_hash = expected_state_hash;
+      final_state_hash = committer_state_hash;
     } =
       search_state in
-    Replay { base_state_hash; expected_state_hash }
+    Replay { base_state_hash; committer_state_hash }
   else
     Searching
       {
@@ -171,12 +144,12 @@ let move_mid_state_hash player ~mid_state_hash searching =
   Move_result_waiting state
 
 let move_replay vm_state replay_state =
-  let { base_state_hash; expected_state_hash } = replay_state in
+  let { base_state_hash; committer_state_hash } = replay_state in
 
   if Vm.hash vm_state = base_state_hash then
     let vm_state = Vm.execute_step vm_state in
     let winner =
-      if Vm.hash vm_state = expected_state_hash then Committer else Rejector
+      if Vm.hash vm_state = committer_state_hash then Committer else Rejector
     in
     Move_result_winner winner
   else

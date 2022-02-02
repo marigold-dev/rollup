@@ -1,2 +1,5 @@
 (library
- (name contract))
+ (name contract)
+ (libraries ligo_environment)
+ (preprocess
+  (pps ppx_ligo_interop)))
