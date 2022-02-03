@@ -19,7 +19,10 @@ val steps : t -> Steps.t
 (* used to calculate the hash without having the actual data *)
 (* TODO: does this function makes sense here? *)
 val make_initial_hash :
-  previous_state_hash:state_hash -> initial_input_hash:input_hash -> state_hash
+  level:level ->
+  previous_state_hash:state_hash ->
+  initial_input_hash:input_hash ->
+  state_hash
 
 (* O(1) *)
 (* TODO: explain better *)
@@ -27,4 +30,4 @@ val make_initial_hash :
    input hash will be the empty hash *)
 (* TODO: does this function makes sense here? *)
 val make_final_hash :
-  final_state_hash:state_hash -> final_step:Steps.t -> state_hash
+  level:level -> final_state_hash:state_hash -> final_step:Steps.t -> state_hash

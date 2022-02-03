@@ -245,38 +245,56 @@ let unreachable () = failwith "unreachable"
 
 type t = {
   input : Nat32_merkle_list.t;
+  (* TODO: this level is only used to ensure uniqueness of hashes
+           and also to have a single step at least *)
+  level : level;
   steps : Steps.t;
   state : Nat32.t;
 }
 
 let execute_step t =
-  let { input; steps; state } = t in
-  match Nat32_merkle_list.pop input with
-  | Some (n, input) ->
-    let steps = Steps.increment steps in
+  let { input; level; steps; state } = t in
+  let steps = Steps.increment steps in
+
+  if Steps.zero = steps then
+    let level = level + [%nat 1] in
+    { input; level; steps; state }
+  else
+    let n, input =
+      match Nat32_merkle_list.pop input with
+      | Some (n, input) -> (n, input)
+      | None -> unreachable () in
     let state = Nat32.(n + state) in
-    { input; steps; state }
-  | None -> unreachable ()
+    { input; level; steps; state }
 
-let halted t = Nat32_merkle_list.is_empty t.input
+let halted t = t.steps <> Steps.zero && Nat32_merkle_list.is_empty t.input
 
-let compute_hash ~input_hash ~steps_hash ~state_hash =
-  Crypto.blake2b (Bytes.concat (Bytes.concat input_hash steps_hash) state_hash)
+let compute_hash ~input_hash ~level_hash ~steps_hash ~state_hash =
+  Crypto.blake2b
+    (Bytes.concat
+       (Bytes.concat input_hash level_hash)
+       (Bytes.concat steps_hash state_hash))
+let hash_nat nat = Crypto.blake2b (Pack.nat nat)
 let hash t =
-  let { input; steps; state } = t in
+  let { input; level; steps; state } = t in
   let input_hash = Nat32_merkle_list.hash input in
+  let level_hash = hash_nat level in
   let steps_hash = Steps.hash steps in
   let state_hash = Nat32.hash state in
-  compute_hash ~input_hash ~steps_hash ~state_hash
+  compute_hash ~input_hash ~level_hash ~steps_hash ~state_hash
 
 let steps t = t.steps
 
-let make_initial_hash ~previous_state_hash ~initial_input_hash =
+let make_initial_hash ~level ~previous_state_hash ~initial_input_hash =
+  (* TODO: level cannot be zero *)
+  let previous_level = abs (level - [%nat 1]) in
+  let level_hash = hash_nat previous_level in
   let steps_hash = Steps.hash Steps.zero in
-  compute_hash ~input_hash:initial_input_hash ~steps_hash
+  compute_hash ~input_hash:initial_input_hash ~level_hash ~steps_hash
     ~state_hash:previous_state_hash
-let make_final_hash ~final_state_hash ~final_step =
+let make_final_hash ~level ~final_state_hash ~final_step =
+  let level_hash = hash_nat level in
   let input_hash = Nat32_merkle_list.(hash empty) in
   let final_steps_hash = Steps.hash final_step in
-  compute_hash ~input_hash ~steps_hash:final_steps_hash
+  compute_hash ~input_hash ~level_hash ~steps_hash:final_steps_hash
     ~state_hash:final_state_hash
