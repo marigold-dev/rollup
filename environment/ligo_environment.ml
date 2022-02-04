@@ -1,7 +1,17 @@
 include Z_int
 include Z_nat
 
+type address = Tezos.Address.t
+type (_, _) big_map
+
+(* bytes *)
 type bytes = string
+let bytes string = Hex.to_string (`Hex string)
+
+(* tez *)
+type tez
+let tez = assert false
+
 (*
    module Tezos = struct
      let level : nat = assert false
@@ -14,36 +24,6 @@ type bytes = string
        assert false
 
      let get_contract_opt : address -> 'parameter contract option = assert false
-   end
-
-   module Big_map : sig
-     val empty : ('key, 'value) big_map
-
-     val find_opt : 'key -> ('key, 'value) big_map -> 'value option
-
-     val add : 'key -> 'value -> ('key, 'value) big_map -> ('key, 'value) big_map
-
-     val remove : 'key -> ('key, 'value) big_map -> ('key, 'value) big_map
-
-     val mem : 'key -> ('key, 'value) big_map -> bool
-
-     val get_and_update :
-       'key ->
-       'value option ->
-       ('key, 'value) big_map ->
-       'value option * ('key, 'value) big_map
-   end = struct
-     let empty = assert false
-
-     let find_opt = assert false
-
-     let add = assert false
-
-     let remove = assert false
-
-     let mem = assert false
-
-     let get_and_update = assert false
    end
 
    module Set : sig
@@ -63,6 +43,26 @@ type bytes = string
 
      let fold = assert false
    end *)
+module Big_map : sig
+  val empty : ('key, 'value) big_map
+
+  val find_opt : 'key -> ('key, 'value) big_map -> 'value option
+
+  val add : 'key -> 'value -> ('key, 'value) big_map -> ('key, 'value) big_map
+
+  val remove : 'key -> ('key, 'value) big_map -> ('key, 'value) big_map
+
+  val mem : 'key -> ('key, 'value) big_map -> bool
+end = struct
+  let empty = assert false
+  let find_opt = assert false
+
+  let add = assert false
+
+  let remove = assert false
+
+  let mem = assert false
+end
 
 module Pack = struct
   open Tezos.Pack
@@ -72,7 +72,6 @@ module Pack = struct
   let nat_list l = list (List.map nat l)
   let nat_pair_nat_bytes (n1, (n2, b)) = pair (nat n1) (pair (nat n2) (bytes b))
 
-  let bytes b = to_string (bytes b)
   let nat n = to_string (nat n)
   let nat_list n = to_string (nat_list n)
   let nat_pair_nat_bytes x = to_string (nat_pair_nat_bytes x)

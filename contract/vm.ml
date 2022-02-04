@@ -243,58 +243,77 @@ open Environment
 
 let unreachable () = failwith "unreachable"
 
+type storage =
+  | Value of Nat32.t
+  | Hash  of storage_hash
 type t = {
-  input : Nat32_merkle_list.t;
   (* TODO: this level is only used to ensure uniqueness of hashes
            and also to have a single step at least *)
   level : level;
-  steps : Steps.t;
-  state : Nat32.t;
+  step : Step.t;
+  input : Nat32_merkle_list.t;
+  storage : storage;
 }
 
-let execute_step t =
-  let { input; level; steps; state } = t in
-  let steps = Steps.increment steps in
+let shallow ~level ~step ~input_hash ~storage_hash =
+  let input = Nat32_merkle_list.shallow input_hash in
+  let storage = Hash storage_hash in
+  { level; step; input; storage }
 
-  if Steps.zero = steps then
+let execute_step t =
+  let { level; step; input; storage } = t in
+  let step = Step.increment step in
+
+  if Step.zero = step then
     let level = level + [%nat 1] in
-    { input; level; steps; state }
+    { level; step; input; storage }
   else
     let n, input =
       match Nat32_merkle_list.pop input with
       | Some (n, input) -> (n, input)
-      | None -> unreachable () in
-    let state = Nat32.(n + state) in
-    { input; level; steps; state }
+      | None ->
+        (* TODO: missing data *)
+        unreachable () in
+    let storage =
+      match storage with
+      | Value storage -> storage
+      | Hash _ ->
+        (* TODO: missing data *)
+        unreachable () in
+    let storage = Value Nat32.(n + storage) in
+    { level; step; input; storage }
 
-let halted t = t.steps <> Steps.zero && Nat32_merkle_list.is_empty t.input
+let halted t = t.step <> Step.zero && Nat32_merkle_list.is_empty t.input
 
-let compute_hash ~input_hash ~level_hash ~steps_hash ~state_hash =
+let hash_both a b = Crypto.blake2b (Bytes.concat a b)
+
+(* TODO: input_storage_hash*)
+let compute_hash ~level_hash ~step_hash ~input_hash ~storage_hash =
   Crypto.blake2b
     (Bytes.concat
-       (Bytes.concat input_hash level_hash)
-       (Bytes.concat steps_hash state_hash))
+       (hash_both level_hash step_hash)
+       (hash_both input_hash storage_hash))
+
 let hash_nat nat = Crypto.blake2b (Pack.nat nat)
 let hash t =
-  let { input; level; steps; state } = t in
+  let { level; step; storage; input } = t in
+
+  let level_hash = hash_nat level in
+  let step_hash = Step.hash step in
+
   let input_hash = Nat32_merkle_list.hash input in
-  let level_hash = hash_nat level in
-  let steps_hash = Steps.hash steps in
-  let state_hash = Nat32.hash state in
-  compute_hash ~input_hash ~level_hash ~steps_hash ~state_hash
+  let storage_hash =
+    match storage with
+    | Value storage -> Nat32.hash storage
+    | Hash storage_hash -> storage_hash in
+  compute_hash ~level_hash ~step_hash ~input_hash ~storage_hash
 
-let steps t = t.steps
-
-let make_initial_hash ~level ~previous_state_hash ~initial_input_hash =
+let initial ~level ~initial_input_hash ~previous_storage_hash =
   (* TODO: level cannot be zero *)
-  let previous_level = abs (level - [%nat 1]) in
-  let level_hash = hash_nat previous_level in
-  let steps_hash = Steps.hash Steps.zero in
-  compute_hash ~input_hash:initial_input_hash ~level_hash ~steps_hash
-    ~state_hash:previous_state_hash
-let make_final_hash ~level ~final_state_hash ~final_step =
-  let level_hash = hash_nat level in
-  let input_hash = Nat32_merkle_list.(hash empty) in
-  let final_steps_hash = Steps.hash final_step in
-  compute_hash ~input_hash ~level_hash ~steps_hash:final_steps_hash
-    ~state_hash:final_state_hash
+  shallow
+    ~level:(abs (level - [%nat 1]))
+    ~step:Step.zero ~input_hash:initial_input_hash
+    ~storage_hash:previous_storage_hash
+
+let final ~level ~step ~storage_hash =
+  shallow ~level ~step ~input_hash:Nat32_merkle_list.(hash empty) ~storage_hash

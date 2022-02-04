@@ -7,14 +7,16 @@ open Environment
 (* TODO: validate step is inside of state_hash, if it's not,
          which attack is possible? *)
 type search_state = {
-  initial_step : Steps.t;
+  initial_step : Step.t;
+  (* TODO: we could do the game over input_storage_hash only
+           avoiding recomputing the state hash on every round *)
   initial_state_hash : state_hash;
-  final_step : Steps.t;
+  final_step : Step.t;
   final_state_hash : state_hash;
 }
 type handshake_state = {
   initial_state_hash : state_hash;
-  final_step : Steps.t;
+  final_step : Step.t;
 }
 type searching_state = {
   search_state : search_state;
@@ -41,21 +43,12 @@ type move_result =
   | Move_result_waiting of state
   | Move_result_invalid
 
-let play ~initial_state_hash ~committer_steps ~rejector_steps =
-  let committer_steps = Steps.of_non_zero committer_steps in
-  let rejector_steps = Steps.of_non_zero rejector_steps in
-
-  (* TODO: handle case where there was a no step or two steps *)
-  let final_step = Steps.min committer_steps rejector_steps in
-  (* TODO: possible optimization, when committer_steps <= rejector_steps *)
-  Handshake { initial_state_hash; final_step }
-
 let step_search_state ~committer_mid_state_hash ~rejector_mid_state_hash
     search_state =
   let { initial_step; initial_state_hash; final_step; final_state_hash } =
     search_state in
   let mid_state_hash = committer_mid_state_hash in
-  let mid_step = Steps.mid_step ~initial_step ~final_step in
+  let mid_step = Step.mid_step ~initial_step ~final_step in
 
   if committer_mid_state_hash = rejector_mid_state_hash then
     {
@@ -75,7 +68,7 @@ let step_search_state ~committer_mid_state_hash ~rejector_mid_state_hash
 (* TODO: I don't like the name of this function
          but *)
 let next_state search_state =
-  if Steps.increment search_state.initial_step = search_state.final_step then
+  if Step.increment search_state.initial_step = search_state.final_step then
     let {
       initial_step = _;
       initial_state_hash = base_state_hash;
@@ -91,6 +84,40 @@ let next_state search_state =
         committer_mid_state_hash = None;
         rejector_mid_state_hash = None;
       }
+
+let play ~initial_state_hash ~committer_steps ~rejector_steps =
+  let committer_steps = Step.of_non_zero committer_steps in
+  let rejector_steps = Step.of_non_zero rejector_steps in
+
+  (* TODO: handle case where there was a no step or two steps *)
+  let final_step = Step.min committer_steps rejector_steps in
+  if committer_steps > rejector_steps then
+    Handshake
+      {
+        initial_state_hash = previous_state_hash;
+        final_step = rejector_steps;
+        rejector_mid_state_hash;
+      }
+  else
+    let search_state = {
+      initial_step = Steps.zero;
+    initial_state_hash
+    } in
+    let x = next_state Steps.zero in
+    Searching
+      {
+        search_state =
+          {
+            initial_step = 0n;
+            initial_state_hash = previous_state_hash;
+            final_step = committer_steps;
+            final_state_hash = committer_state_hash;
+          };
+        committer_mid_state_hash = None;
+        rejector_mid_state_hash = None;
+      }
+  (* TODO: possible optimization, when committer_steps <= rejector_steps *)
+  Handshake { initial_state_hash; final_step }
 
 let move_handshake ~final_state_hash handshake =
   let { initial_state_hash; final_step } = handshake in

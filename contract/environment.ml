@@ -7,6 +7,7 @@ type player =
 type committer = address
 type rejector = address
 
+type storage_hash = bytes
 type state_hash = bytes
 type input_hash = bytes
 type action_hash = bytes

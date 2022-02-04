@@ -1,5 +1,6 @@
 open Ligo_environment
 
+(* TODO: analyze if it's safe to test with a mocked VM *)
 type t = bytes list
 
 let make ~hashes = hashes

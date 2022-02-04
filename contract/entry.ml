@@ -96,8 +96,10 @@ module Reject (Tezos : Tezos) = struct
     let committer_steps = Storage.Commit_data.steps committer_commit_data in
     let rejector_steps = Storage.Commit_data.steps rejector_commit_data in
 
+    (* TODO: this likely should be initial_vm_hash *)
     let initial_state_hash =
-      Vm.make_initial_state_hash ~previous_state_hash ~input_hash in
+      Vm.make_initial_hash ~previous_state_hash ~initial_input_hash:input_hash
+    in
     let game =
       match
         Temporal_rejection_game.play ~current_turn ~initial_state_hash

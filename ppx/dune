@@ -1,6 +1,6 @@
 (library
  (name ppx_ligo_interop)
- (libraries ppxlib)
+ (libraries ppxlib hex)
  (preprocess
   (pps ppxlib.metaquot))
  (kind ppx_rewriter))

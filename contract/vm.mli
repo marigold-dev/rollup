@@ -3,6 +3,9 @@ open Environment
 type t
 
 (* O(1) *)
+val shallow : t -> t
+
+(* O(1) *)
 val execute_step : t -> t
 
 (* O(1) *)
@@ -11,23 +14,21 @@ val halted : t -> bool
 (* O(1) *)
 val hash : t -> hash
 
+(* TODO: should those 3 functions be here? *)
 (* O(1) *)
-val steps : t -> Steps.t
-
-(* O(1) *)
-(* TODO: explain better *)
-(* used to calculate the hash without having the actual data *)
-(* TODO: does this function makes sense here? *)
-val make_initial_hash :
+val initial :
   level:level ->
-  previous_state_hash:state_hash ->
+  previous_storage_hash:storage_hash ->
   initial_input_hash:input_hash ->
   state_hash
 
 (* O(1) *)
-(* TODO: explain better *)
-(* used to calculate the hash after computing everything,
-   input hash will be the empty hash *)
-(* TODO: does this function makes sense here? *)
-val make_final_hash :
-  level:level -> final_state_hash:state_hash -> final_step:Steps.t -> state_hash
+val make_mid_state_hash :
+  level:level -> step:Step.t -> input_storage_hash:hash -> state_hash
+
+(* O(1) *)
+val make_final_state_hash :
+  level:level ->
+  final_step:Step.t ->
+  final_storage_hash:state_hash ->
+  state_hash

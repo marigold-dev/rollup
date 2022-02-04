@@ -11,7 +11,7 @@ type parameter =
       level : level;
       previous_state_hash : state_hash;
       state_hash : state_hash;
-      steps : steps;
+      steps : nat;
     }
   | Reject       of {
       level : level;
